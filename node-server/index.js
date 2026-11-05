@@ -61,7 +61,7 @@ wss.on("connection", async (ws, req) => {
       client.realtime.send(event.type, event);
     } catch (e) {
       console.error(e.message);
-      console.log(`Error parsing event from client: ${data}`);
+      console.log("Error parsing event from client");
     }
   };
   ws.on("message", (data) => {
