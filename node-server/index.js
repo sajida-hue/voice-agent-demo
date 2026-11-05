@@ -33,6 +33,15 @@ wss.on("connection", async (ws, req) => {
     return;
   }
 
+  const expectedToken = process.env.AGENT_ACCESS_TOKEN;
+  const providedToken = url.searchParams.get("token");
+
+  if (!expectedToken || providedToken !== expectedToken) {
+    console.log("Unauthorized connection");
+    ws.close(1008, "Unauthorized");
+    return;
+  }
+
   const client = new RealtimeClient({ apiKey: OPENAI_API_KEY });
 
   // Relay: OpenAI Realtime API Event -> Browser Event
