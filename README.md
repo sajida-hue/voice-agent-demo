@@ -1,3 +1,14 @@
+> **Development migration — not ready for deployment.** The Node.js relay and
+> client now use the OpenAI Realtime GA wire protocol. The Python server below
+> remains legacy and must not be used for this migration. Existing relay query
+> token authorization remains unchanged and needs replacement before deployment.
+> Recall.ai integration and bot creation are pending the required regional
+> Recall.ai MCP connection. Do not use the legacy quickstart to join a meeting.
+>
+> Offline checks: `cd node-server && npm install && npm test`; then
+> `cd ../client && npm install && npm run build && npm run lint`.
+> No live meeting or paid API call is needed for these checks.
+
 # Recall.ai Real-Time Voice Agent
 
 ### [Watch the Demo Here!](https://www.loom.com/share/2a02fac2643441c1990da861e829892c)
