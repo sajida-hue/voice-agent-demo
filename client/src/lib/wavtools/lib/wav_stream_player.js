@@ -136,11 +136,14 @@ export class WavStreamPlayer {
       requestId,
     });
     let trackSampleOffset;
+    const deadline = Date.now() + 1000;
     while (!trackSampleOffset) {
+      if (this.context.state === 'closed' || Date.now() > deadline) return null;
       trackSampleOffset = this.trackSampleOffsets[requestId];
       await new Promise((r) => setTimeout(() => r(), 1));
     }
     const { trackId } = trackSampleOffset;
+    delete this.trackSampleOffsets[requestId];
     if (interrupt && trackId) {
       this.interruptedTrackIds[trackId] = true;
     }
@@ -158,3 +161,4 @@ export class WavStreamPlayer {
 }
 
 globalThis.WavStreamPlayer = WavStreamPlayer;
+

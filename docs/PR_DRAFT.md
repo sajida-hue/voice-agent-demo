@@ -1,52 +1,58 @@
-# Draft: migrate Sajida's Node/browser audio path to Realtime GA
+# Private Sajida browser voice pilot with Realtime GA
 
-Base: main
-Head: sajida-ai-development
-Status: partial implementation; not ready to merge or deploy.
+The deployed client can open a WebSocket without being authorized, then display a
+misleading Connected status while the relay rejects it. This change replaces the
+shared query-string token with password login and a revocable 15-minute cookie
+session, and waits for the Realtime audio configuration acknowledgement before
+reporting readiness.
 
-The browser and Node relay depended on the obsolete Realtime Beta SDK. Use
-the GA WebSocket wire protocol, nested PCM audio settings, and
-response.output_audio.delta events instead. Initialize the session before
-starting microphone streaming and the greeting. Handle interruption with
-playback offsets and conversation.item.truncate.
+## Behavior
 
-The relay bounds pending audio and outbound backpressure, times out upstream
-startup, closes paired connections on failure, and avoids logging raw events
-or upstream exception details. The browser releases audio resources on failure
-and unmount, and no longer renders the relay URL or its token.
+- Node serves the built client, HTTP login/session/logout endpoints and the
+  authenticated /voice upgrade on one origin.
+- Production cookies are host-only, Secure, HttpOnly and SameSite=Strict.
+  Same-origin checks, bounded login attempts, one active voice connection, expiry
+  and logout protect the private single-operator pilot. Server restart revokes
+  the in-memory sessions.
+- The existing GA relay replaces the Beta SDK and bounds startup queues and
+  backpressure. API credentials stay on the server.
+- The client has explicit Sign in, Start, End and Sign out controls, microphone
+  and playback cleanup, and errors without exposing relay URLs or secrets.
+- Sajida speaks English by default in a soft, warm, calm style. Marin is the
+  initial selectable voice, alongside Cedar and Coral.
+- Locked dependencies and docs/RENDER_BROWSER_SETUP.md provide the one-service
+  Render build and runtime configuration. The old static site is not used for
+  cookie-authenticated browser sessions.
 
 ## Validation
 
-- Node relay: 10 offline tests pass (GA handshake, queue ordering, audio
-  forwarding, malformed events, queue limit, failure redaction, timeout,
-  backpressure).
-- Client: TypeScript/Vite production build passes.
-- Client: ESLint passes with one existing unused-disable warning in wav_recorder.js.
-- node --check node-server/index.js and git diff --check pass.
-- No live OpenAI API call, Recall API call, deployment, or meeting was started.
-- Browser audio behavior has not been verified end to end.
+- 21 server tests pass: real local HTTP/WebSocket auth lifecycle and offline GA
+  relay transport tests. No live provider call is used.
+- 9 client tests pass with simulated DOM/audio/transport: login, explicit start,
+  GA readiness and audio events, interruption, error cleanup, stop, logout,
+  expiry and cancellation while microphone permission is pending.
+- Client TypeScript/Vite production build passes.
+- ESLint passes with one pre-existing unused-disable warning in wav_recorder.js.
+- Chromium could not start in the execution environment (system socket
+  restriction). Actual browser audio, CSP/worklets, autoplay and voice quality
+  still require the live acceptance checklist.
+- No live OpenAI call, bot creation, meeting, deployment or main-branch update
+  was performed.
 
-## Remaining work — merge blockers
+## Remaining scope and limits
 
-- Connect the regional Recall.ai MCP mandated by AGENTS.md. No Recall MCP
-  tools or documents were available, so Recall request fields and bot behavior
-  have deliberately not been changed or claimed as validated.
-- Replace the inherited static query-token authorization with scoped,
-  short-lived authorization; implement verified webhook handling as appropriate
-  after consulting Recall MCP.
-- Implement and test current Recall Output Media integration and explicit
-  operator-confirmed test bot creation. No test bot has been created.
-- Supply a Google Meet test URL and explicit join approval before any live test.
-- Migrate or retire the Python server, which still uses the legacy protocol
-  and must not be deployed.
-- Add cloud deployment packaging and perform a confirmed end-to-end test.
-- Repository write access is now available. This file records the draft review
-  scope; the actual PR status is tracked on GitHub.
+This is a private browser pilot, not the finished meeting assistant. Keep the PR
+draft until the owner chooses and completes the live browser acceptance test.
+The in-memory auth store and global limiter target one server instance and one
+operator, not public multi-user access.
 
-## OpenAI references
+Recall.ai list_regions was queried: us-east-1 is available and the default.
+No Recall API request fields, webhooks, recording settings or bot behavior were
+changed. Meeting media, verified webhooks and short-lived bot-specific
+authorization remain separate work. The Python implementation remains legacy.
 
-- https://developers.openai.com/api/reference/resources/realtime/client-events
+## References
+
 - https://developers.openai.com/api/docs/guides/realtime-conversations
+- https://render.com/docs/monorepo-support
 
-No credentials were added. Keep provider keys server-side in deployment secrets.
-Do not merge this draft until the security and Recall blockers are resolved.

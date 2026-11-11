@@ -1,99 +1,119 @@
-import { useEffect, useState } from 'react';
-// @ts-expect-error External audio utilities without TypeScript definitions
-import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
-import { instructions } from './conversation_config';
+import { useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+import { startVoice } from './voice';
+import type { Voice } from './voice';
 import './App.css';
 
+type Session = { authenticated: boolean; expiresAt: number | null };
+
 export function App() {
-  const [status, setStatus] = useState('Connecting');
+  const [session, setSession] = useState<Session | null>(null);
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState('Checking session…');
+  const [busy, setBusy] = useState(false);
+  const [active, setActive] = useState(false);
+  const [voice, setVoice] = useState<Voice>('marin');
+  const stopRef = useRef<ReturnType<typeof startVoice> | null>(null);
+  const activeRef = useRef(false);
+  const mounted = useRef(false);
+
   useEffect(() => {
-    let disposed = false;
-    let socket: WebSocket | undefined;
-    const recorder = new WavRecorder({ sampleRate: 24000 });
-    const player = new WavStreamPlayer({ sampleRate: 24000 });
-    let initialized = false;
-    let ready = false;
-    let endingRecorder = false;
-    const send = (event: object) => {
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
-    };
-    const cleanup = () => {
-      ready = false;
-      if (socket) {
-        socket.onmessage = null;
-        socket.onclose = null;
-        socket.onerror = null;
-        socket.close();
-      }
-      if (recorder.processor && !endingRecorder) {
-        endingRecorder = true;
-        void recorder.end().catch(() => {}).finally(() => { endingRecorder = false; });
-      }
-      if (player.context && player.context.state !== 'closed') void player.context.close().catch(() => {});
-    };
-    async function start() {
-      try {
-        const url = new URL(new URLSearchParams(location.search).get('wss') || '');
-        if (url.protocol !== 'wss:' && !(url.protocol === 'ws:' && url.hostname === 'localhost')) {
-          throw new Error('Invalid relay URL');
+    mounted.current = true;
+    const controller = new AbortController();
+    // Retire old token-bearing links without displaying or using their values.
+    if (location.search || location.hash) history.replaceState(null, '', location.pathname);
+    fetch('/api/session', { signal: controller.signal, cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error('Session unavailable');
+        const value: Session = await response.json();
+        if (mounted.current) { setSession(value); setStatus(value.authenticated ? 'Ready to start' : 'Sign in to talk with Sajida'); }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && mounted.current) {
+          setSession({ authenticated: false, expiresAt: null });
+          setStatus('Server unavailable. Refresh this page to retry.');
         }
-        await recorder.begin();
-        if (disposed) { cleanup(); return; }
-        await player.connect();
-        if (disposed) { cleanup(); return; }
-        socket = new WebSocket(url);
-        socket.onmessage = async ({ data }) => {
-          if (disposed) return;
-          try {
-            const event = JSON.parse(data);
-            if (event.type === 'session.created' && !initialized) {
-              initialized = true;
-              send({ type: 'session.update', session: {
-                type: 'realtime', instructions, output_modalities: ['audio'],
-                audio: {
-                  input: { format: { type: 'audio/pcm', rate: 24000 }, turn_detection: {
-                    type: 'server_vad', create_response: true, interrupt_response: true,
-                  } },
-                  output: { format: { type: 'audio/pcm', rate: 24000 }, voice: 'alloy' },
-                },
-              } });
-            } else if (event.type === 'session.updated' && !ready) {
-              ready = true;
-              setStatus('Connected — Sajida — AI Designer');
-              await recorder.record((chunk: { mono: ArrayBuffer }) => {
-                if (!ready) return;
-                const bytes = new Uint8Array(chunk.mono);
-                let binary = '';
-                for (const byte of bytes) binary += String.fromCharCode(byte);
-                send({ type: 'input_audio_buffer.append', audio: btoa(binary) });
-              });
-              if (disposed) { cleanup(); return; }
-              send({ type: 'response.create' });
-            } else if (event.type === 'response.output_audio.delta') {
-              const bytes = Uint8Array.from(atob(event.delta), c => c.charCodeAt(0));
-              player.add16BitPCM(bytes.buffer, event.item_id);
-            } else if (event.type === 'input_audio_buffer.speech_started') {
-              const offset = await player.interrupt();
-              if (offset?.trackId) send({ type: 'conversation.item.truncate', item_id: offset.trackId,
-                content_index: 0, audio_end_ms: Math.floor(offset.offset / 24) });
-            } else if (event.type === 'error' || (event.type === 'response.done' && event.response?.status === 'failed')) {
-              throw new Error('Realtime error');
-            }
-          } catch {
-            setStatus('Voice session failed');
-            cleanup();
-          }
-        };
-        socket.onerror = () => { if (!disposed) setStatus('Relay connection failed'); cleanup(); };
-        socket.onclose = () => { if (!disposed) setStatus('Disconnected'); cleanup(); };
-      } catch {
-        if (!disposed) setStatus('Unable to start voice session');
-        cleanup();
-      }
-    }
-    void start();
-    return () => { disposed = true; cleanup(); };
+      });
+    return () => { mounted.current = false; controller.abort(); stopRef.current?.(); };
   }, []);
-  return <div className="app-container"><div role="status">{status}</div></div>;
+
+  useEffect(() => {
+    if (!session?.authenticated || !session.expiresAt) return;
+    const timer = setTimeout(() => {
+      stopRef.current?.('Session expired. Please sign in again.');
+      setSession({ authenticated: false, expiresAt: null });
+      setStatus('Session expired. Please sign in again.');
+    }, Math.max(0, session.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [session]);
+
+  async function login(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      setPassword('');
+      if (!response.ok) {
+        setStatus(response.status === 429 ? 'Too many sign-in attempts. Wait five minutes.' : 'Sign-in failed. Check your password and try again.');
+        return;
+      }
+      setSession(await response.json());
+      setStatus('Ready to start');
+    } catch { setPassword(''); setStatus('Could not reach the server. Please try again.'); }
+    finally { setBusy(false); }
+  }
+
+  async function logout() {
+    stopRef.current?.();
+    setBusy(true);
+    try {
+      const response = await fetch('/api/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Logout failed');
+      setSession({ authenticated: false, expiresAt: null });
+      setStatus('Signed out');
+    } catch { setStatus('Could not sign out. Please try again; your voice conversation has stopped.'); }
+    finally { setBusy(false); }
+  }
+
+  function start() {
+    if (activeRef.current || !session?.authenticated) return;
+    activeRef.current = true;
+    setActive(true);
+    stopRef.current = startVoice(voice, message => { if (mounted.current) setStatus(message); }, () => {
+      activeRef.current = false;
+      if (mounted.current) setActive(false);
+    });
+  }
+
+  return <main className="app-container"><section className="voice-card" aria-labelledby="title">
+    <p className="eyebrow">AMZLUEA · AI DESIGN ASSISTANT</p>
+    <h1 id="title">Meet Sajida</h1>
+    <p>A warm, calm voice to help you think through your next design project.</p>
+    <p className="status" role="status" aria-live="polite">{status}</p>
+    {session && (session.authenticated ? <>
+      <label htmlFor="voice">Voice</label>
+      <select id="voice" value={voice} disabled={active || busy} onChange={event => setVoice(event.target.value as Voice)}>
+        <option value="marin">Marin</option><option value="cedar">Cedar</option><option value="coral">Coral</option>
+      </select>
+      <p className="hint">Change voices between conversations. Each new conversation starts fresh.</p>
+      <div className="actions">
+        {active ? <button onClick={() => stopRef.current?.()}>End conversation</button>
+          : <button disabled={busy} onClick={start}>Start conversation</button>}
+        <button className="secondary" disabled={busy} onClick={() => void logout()}>Sign out</button>
+      </div>
+      <p className="hint">Starting uses your microphone and the paid OpenAI API. Access expires after 15 minutes.</p>
+    </> : <form onSubmit={event => void login(event)}>
+      <label htmlFor="password">Access password</label>
+      <input id="password" type="password" autoComplete="current-password" maxLength={1024}
+        value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} />
+      <button type="submit" disabled={busy || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    </form>)}
+    <p className="privacy">Sajida is an AI assistant. Audio is sent to OpenAI during the conversation. This app does not save recordings.</p>
+  </section></main>;
 }
 export default App;
+

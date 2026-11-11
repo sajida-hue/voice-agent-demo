@@ -1,48 +1,17 @@
-import { WebSocketServer } from "ws";
-import { attachRelay } from "./relay.js";
-import dotenv from "dotenv";
+import 'dotenv/config';
+import { createApplication } from './server.js';
 
-dotenv.config();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-if (!OPENAI_API_KEY) {
-  console.error(
-    `Environment variable "OPENAI_API_KEY" is required.\n` +
-      `Please set it in your .env file.`
-  );
-  process.exit(1);
+try {
+  const { server } = createApplication({
+    apiKey: process.env.OPENAI_API_KEY,
+    password: process.env.APP_PASSWORD,
+    publicOrigin: process.env.PUBLIC_ORIGIN,
+    model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
+  });
+  const port = Number(process.env.PORT || 3000);
+  server.listen(port, () => console.log(`Sajida server listening on port ${port}`));
+} catch {
+  console.error('Startup failed. Check OPENAI_API_KEY, APP_PASSWORD (at least 16 characters), and PUBLIC_ORIGIN.');
+  process.exitCode = 1;
 }
 
-const PORT = Number(process.env.PORT || 3000);
-const wss = new WebSocketServer({ port: PORT });
-
-wss.on("connection", async (ws, req) => {
-  if (!req.url) {
-    console.log("No URL provided, closing connection.");
-    ws.close();
-    return;
-  }
-
-  const url = new URL(req.url, `https://${req.headers.host}`);
-  const pathname = url.pathname;
-
-  if (pathname !== "/") {
-    console.log(`Invalid pathname: "${pathname}"`);
-    ws.close();
-    return;
-  }
-
-  const expectedToken = process.env.AGENT_ACCESS_TOKEN;
-  const providedToken = url.searchParams.get("token");
-
-  if (!expectedToken || providedToken !== expectedToken) {
-    console.log("Unauthorized connection");
-    ws.close(1008, "Unauthorized");
-    return;
-  }
-
-  attachRelay(ws, { apiKey: OPENAI_API_KEY });
-});
-
-console.log(`Websocket server listening on port ${PORT}`);
