@@ -49,7 +49,8 @@ The conversational instructions live in `client/src/conversation_config.ts`.
 They favor direct answers, concrete design suggestions, occasional kind humor,
 and questions that advance a decision, rather than repeated acknowledgements,
 paraphrases, or a fixed intake script. Introduce the AI identity once at the start.
-For Surabhi, the relay sends stability 0.40, similarity 0.75, and speed 0.98.
+For Surabhi, the relay sends stability 0.40, similarity 0.75, and speed 1.08
+(increased from 0.98 for the operator's faster-speech listening trial).
 The stability adjustment from 0.45 is a listening experiment, not a guarantee of
 more natural speech. End any current conversation and reload after deployment
 so a new session uses the updated instructions and voice settings.

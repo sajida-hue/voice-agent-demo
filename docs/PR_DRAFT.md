@@ -31,7 +31,8 @@ Surabhi — Warm Indian Female; Marin, Cedar and Coral remain selectable.
   sentences are requested. The revised prompt favors direct answers, concrete
   design judgement, occasional kind humor and purposeful questions; it removes
   the fixed intake flow and routine paraphrasing. AI identity is introduced once.
-  Surabhi stability is 0.40 (from 0.45); similarity and speed remain 0.75/0.98.
+  Surabhi stability is 0.40 (from 0.45), similarity is 0.75, and speed is 1.08
+  (from 0.98, for a faster-speech listening trial).
   Voice quality is evaluated by listening, not guaranteed by these settings.
 
 ## Validation

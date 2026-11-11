@@ -85,7 +85,7 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
     record.socket.on('open', () => {
       if (record.cancelled || closed) return;
       send(record, { text: ' ', voice_settings: {
-        stability: 0.40, similarity_boost: 0.75, use_speaker_boost: false, speed: 0.98,
+        stability: 0.40, similarity_boost: 0.75, use_speaker_boost: false, speed: 1.08,
       }, generation_config: { chunk_length_schedule: [80, 120, 180, 240] } });
       drain(record);
     });
