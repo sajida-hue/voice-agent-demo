@@ -2,7 +2,8 @@
 
 This branch prepares a private, single-operator browser voice pilot. It does not
 create Recall bots or join meetings. The operator confirmed native OpenAI voice
-playback. Live Surabhi speech and the full interruption checklist still need testing.
+playback and subsequently confirmed Surabhi speech after enabling a paid ElevenLabs
+plan. The revised conversational style and full interruption checklist need listening tests.
 
 ## Configuration for the existing Web Service
 
@@ -43,6 +44,15 @@ conversation. The microphone is requested only on Start. Select Surabhi, Marin,
 Cedar or Coral between conversations. Surabhi is the default when an ElevenLabs
 key is configured; otherwise Marin is the default. Sajida speaks English in a
 soft, warm, calm style. Voice quality and accent require listening, not just tests.
+
+The conversational instructions live in `client/src/conversation_config.ts`.
+They favor direct answers, concrete design suggestions, occasional kind humor,
+and questions that advance a decision, rather than repeated acknowledgements,
+paraphrases, or a fixed intake script. Introduce the AI identity once at the start.
+For Surabhi, the relay sends stability 0.40, similarity 0.75, and speed 0.98.
+The stability adjustment from 0.45 is a listening experiment, not a guarantee of
+more natural speech. End any current conversation and reload after deployment
+so a new session uses the updated instructions and voice settings.
 
 The standalone Static Site can remain unchanged during this pilot, but cannot
 authenticate against this same-origin cookie setup. Old `?wss=...&token=...`
@@ -139,8 +149,9 @@ category and reference rather than a key or password.
 
 The Web Service was deployed and its login page and `/healthz` were checked on
 2026-11-11. Safe diagnostics identified an invalid OpenAI API key. After replacing
-the key, the operator confirmed that Sajida spoke with the native voice.
-Surabhi speech, microphone conversation and live interruption remain unverified.
+the key, the operator confirmed that Sajida spoke with the native voice, and later
+confirmed Surabhi speech after enabling a paid ElevenLabs plan. Detailed live
+interruption and the revised conversational style remain to be evaluated.
 
 1. `/healthz` returns `ok`, and the login page loads at the Web Service address.
 2. Wrong password fails; correct password reveals Start conversation.
@@ -152,6 +163,12 @@ Surabhi speech, microphone conversation and live interruption remain unverified.
 8. For Surabhi, verify a warm Indian English voice, interruption during synthesis,
    a follow-up question and a pause between streamed audio chunks. Inspect only
    safe diagnostics if speech fails; never share an API key or raw provider body.
+9. For the conversational style, try a vague brief, reject the first suggestion,
+   ask why she prefers one direction, and ask for a simpler explanation. Listen
+   over several turns: direct answers, useful design reasoning, no recurring
+   acknowledgement or paraphrase, no compulsory question or joke after each reply.
+   Compare the same brief across fresh conversations; subjective quality is not
+   established by offline tests.
 
 Recall meeting media, bot creation, webhook verification, and a test meeting are
 separate remaining work. The legacy Python server must not be deployed for this pilot.

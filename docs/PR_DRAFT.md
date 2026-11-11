@@ -28,7 +28,11 @@ Surabhi — Warm Indian Female; Marin, Cedar and Coral remain selectable.
   provider bodies, credentials or conversation content are logged.
 - The client identifies Sajida as AI and explains paid usage and the provider
   processing before Start. English, warm calm delivery and conversational
-  sentences are requested. Voice quality is evaluated by listening.
+  sentences are requested. The revised prompt favors direct answers, concrete
+  design judgement, occasional kind humor and purposeful questions; it removes
+  the fixed intake flow and routine paraphrasing. AI identity is introduced once.
+  Surabhi stability is 0.40 (from 0.45); similarity and speed remain 0.75/0.98.
+  Voice quality is evaluated by listening, not guaranteed by these settings.
 
 ## Validation
 
@@ -41,9 +45,11 @@ Surabhi — Warm Indian Female; Marin, Cedar and Coral remain selectable.
   rejection, error cleanup and pending microphone permission cancellation.
 - TypeScript/Vite production build passes. ESLint has no errors and one existing
   unused-disable warning in the recording utility.
-- Automated checks make no paid provider calls. The operator previously confirmed
-  native OpenAI speech after replacing an invalid key. Live Surabhi speech,
-  accent, full microphone dialogue and interruption still need operator testing.
+- Automated checks make no paid provider calls. The operator confirmed native
+  OpenAI speech after replacing an invalid key, then confirmed Surabhi speech
+  after enabling a paid ElevenLabs plan. The revised style and detailed live
+  interruption checklist still need operator testing; no subjective quality
+  claim is inferred from the regression tests.
 - Render deployment and public health/configuration checks are separate from
   proving live voice quality. Main remains unmerged.
 
@@ -63,6 +69,8 @@ short-lived bot-specific authorization remain separate work. Python is legacy.
 ## References
 
 - https://developers.openai.com/api/docs/guides/realtime-conversations
+- https://developers.openai.com/api/docs/guides/voice-prompting
+- https://elevenlabs.io/docs/api-reference/voices/settings/get
 - https://developers.openai.com/api/reference/resources/realtime/client-events
 - https://developers.openai.com/api/reference/resources/realtime/server-events
 - https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/realtime-tts
