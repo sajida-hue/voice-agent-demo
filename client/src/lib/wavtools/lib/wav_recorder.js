@@ -36,6 +36,7 @@ export class WavRecorder {
     this._devices = [];
     // State variables
     this.stream = null;
+    this.context = null;
     this.processor = null;
     this.source = null;
     this.node = null;
@@ -323,6 +324,7 @@ export class WavRecorder {
 
     const context = new AudioContext({ sampleRate: this.sampleRate });
     const source = context.createMediaStreamSource(this.stream);
+    this.context = context;
     // Load and execute the module script.
     try {
       await context.audioWorklet.addModule(this.scriptSrc);
@@ -546,3 +548,4 @@ export class WavRecorder {
 }
 
 globalThis.WavRecorder = WavRecorder;
+

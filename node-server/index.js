@@ -1,91 +1,20 @@
-import { WebSocketServer } from "ws";
-import { RealtimeClient } from "@openai/realtime-api-beta";
-import dotenv from "dotenv";
+import 'dotenv/config';
+import { createApplication } from './server.js';
 
-dotenv.config();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-if (!OPENAI_API_KEY) {
-  console.error(
-    `Environment variable "OPENAI_API_KEY" is required.\n` +
-      `Please set it in your .env file.`
-  );
-  process.exit(1);
+try {
+  const { server } = createApplication({
+    apiKey: process.env.OPENAI_API_KEY,
+    password: process.env.APP_PASSWORD,
+    publicOrigin: process.env.PUBLIC_ORIGIN,
+    model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
+    elevenlabsApiKey: process.env.ELEVENLABS_API_KEY,
+    elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'ch9J8IB6HKlEHQaWQFdk',
+    elevenlabsModel: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+  });
+  const port = Number(process.env.PORT || 3000);
+  server.listen(port, () => console.log(`Sajida server listening on port ${port}`));
+} catch {
+  console.error('Startup failed. Check OPENAI_API_KEY, APP_PASSWORD (at least 16 characters), and PUBLIC_ORIGIN.');
+  process.exitCode = 1;
 }
 
-const PORT = Number(process.env.PORT || 3000);
-const wss = new WebSocketServer({ port: PORT });
-
-wss.on("connection", async (ws, req) => {
-  if (!req.url) {
-    console.log("No URL provided, closing connection.");
-    ws.close();
-    return;
-  }
-
-  const url = new URL(req.url, `https://${req.headers.host}`);
-  const pathname = url.pathname;
-
-  if (pathname !== "/") {
-    console.log(`Invalid pathname: "${pathname}"`);
-    ws.close();
-    return;
-  }
-
-  const expectedToken = process.env.AGENT_ACCESS_TOKEN;
-  const providedToken = url.searchParams.get("token");
-
-  if (!expectedToken || providedToken !== expectedToken) {
-    console.log("Unauthorized connection");
-    ws.close(1008, "Unauthorized");
-    return;
-  }
-
-  const client = new RealtimeClient({ apiKey: OPENAI_API_KEY });
-
-  // Relay: OpenAI Realtime API Event -> Browser Event
-  client.realtime.on("server.*", (event) => {
-    console.log(`Relaying "${event.type}" to Client`);
-    ws.send(JSON.stringify(event));
-  });
-  client.realtime.on("close", () => ws.close());
-
-  // Relay: Browser Event -> OpenAI Realtime API Event
-  // We need to queue data waiting for the OpenAI connection
-  const messageQueue = [];
-  const messageHandler = (data) => {
-    try {
-      const event = JSON.parse(data);
-      console.log(`Relaying "${event.type}" to OpenAI`);
-      client.realtime.send(event.type, event);
-    } catch (e) {
-      console.error(e.message);
-      console.log(`Error parsing event from client: ${data}`);
-    }
-  };
-  ws.on("message", (data) => {
-    if (!client.isConnected()) {
-      messageQueue.push(data);
-    } else {
-      messageHandler(data);
-    }
-  });
-  ws.on("close", () => client.disconnect());
-
-  // Connect to OpenAI Realtime API
-  try {
-    console.log(`Connecting to OpenAI...`);
-    await client.connect();
-  } catch (e) {
-    console.log(`Error connecting to OpenAI: ${e.message}`);
-    ws.close();
-    return;
-  }
-  console.log(`Connected to OpenAI successfully!`);
-  while (messageQueue.length) {
-    messageHandler(messageQueue.shift());
-  }
-});
-
-console.log(`Websocket server listening on port ${PORT}`);
