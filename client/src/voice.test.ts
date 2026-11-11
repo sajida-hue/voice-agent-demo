@@ -30,11 +30,40 @@ beforeEach(() => {
   audio.recorder = { begin: vi.fn().mockResolvedValue(true), record: vi.fn().mockResolvedValue(true),
     stream: { getTracks: () => [{ stop: vi.fn() }] }, context: context() };
   audio.player = { connect: vi.fn().mockResolvedValue(true), context: context(),
-    add16BitPCM: vi.fn(), interrupt: vi.fn().mockResolvedValue({ trackId: 'item-1', offset: 2400 }) };
+    add16BitPCM: vi.fn(), finish: vi.fn(), interrupt: vi.fn().mockResolvedValue({ trackId: 'item-1', offset: 2400 }) };
 });
 afterEach(() => { stop?.(); stop = undefined; vi.unstubAllGlobals(); });
 
 describe('voice lifecycle with offline audio and transport doubles', () => {
+  it('plays Surabhi PCM, seals the final buffer and acknowledges drained playback', async () => {
+    stop = startVoice('surabhi', vi.fn(), vi.fn()); await flush();
+    const socket = FakeSocket.instances[0];
+    await socket.emit({ type: 'session.created' });
+    await socket.emit({ type: 'session.updated' });
+    audio.player.stream = {};
+    await socket.emit({ type: 'relay.audio.delta', item_id: 'item-1', delta: 'AAAA' });
+    expect(audio.player.add16BitPCM).toHaveBeenCalledTimes(1);
+    await socket.emit({ type: 'relay.audio.done', item_id: 'item-1', samples: 2400 });
+    expect(audio.player.finish).toHaveBeenCalledWith('item-1');
+    audio.player.stream = null;
+    await vi.waitFor(() => expect(socket.send.mock.calls.map(call => JSON.parse(call[0])))
+      .toContainEqual({ type: 'relay.playback.completed', item_id: 'item-1' }));
+  });
+
+  it('Surabhi interruption reports actual playback time and discards late chunks', async () => {
+    stop = startVoice('surabhi', vi.fn(), vi.fn()); await flush();
+    const socket = FakeSocket.instances[0];
+    await socket.emit({ type: 'session.created' });
+    await socket.emit({ type: 'session.updated' });
+    await socket.emit({ type: 'relay.audio.delta', item_id: 'item-1', delta: 'AAAA' });
+    await socket.emit({ type: 'input_audio_buffer.speech_started', relay_item_id: 'item-1' });
+    expect(JSON.parse(socket.send.mock.lastCall![0])).toEqual({
+      type: 'relay.playback.interrupted', item_id: 'item-1', played_ms: 100,
+    });
+    await socket.emit({ type: 'relay.audio.delta', item_id: 'item-1', delta: 'AAAA' });
+    expect(audio.player.add16BitPCM).toHaveBeenCalledTimes(1);
+    expect(socket.send.mock.calls.map(call => JSON.parse(call[0]).type)).not.toContain('conversation.item.truncate');
+  });
   it('waits for GA configuration acknowledgement before recording and requesting a reply', async () => {
     const status = vi.fn();
     stop = startVoice('marin', status, vi.fn());
@@ -105,9 +134,10 @@ describe('voice lifecycle with offline audio and transport doubles', () => {
     stop = startVoice('marin', status, vi.fn()); await flush();
     const socket = FakeSocket.instances[0];
     const reference = '12345678-1234-4234-8234-123456789abc';
-    await socket.emit({ type: 'relay.error', error: { kind: 'quota', code: 'insufficient_quota', reference,
+    await socket.emit({ type: 'relay.error', error: { source: 'elevenlabs', kind: 'quota', code: 'insufficient_quota', reference,
       message: 'private upstream details sk-secret', audio: 'private audio' } });
     expect(status.mock.lastCall![0]).toContain('API quota or billing limit');
+    expect(status.mock.lastCall![0]).toContain('ElevenLabs');
     expect(status.mock.lastCall![0]).toContain(reference);
     expect(status.mock.lastCall![0]).not.toContain('private');
     expect(status.mock.lastCall![0]).not.toContain('sk-secret');

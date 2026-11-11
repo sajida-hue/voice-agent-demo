@@ -1,8 +1,8 @@
 # Sajida — AI design voice assistant
 
 This development branch prepares a **private browser voice pilot** using OpenAI
-Realtime GA. The client and authenticated WebSocket share one Node/Render origin.
-The existing main deployment is separate and has not been updated.
+Realtime GA with optional ElevenLabs speech. The client and authenticated
+WebSocket share one Node/Render origin. Changes are on the development branch.
 
 ## Run and deploy
 
@@ -11,10 +11,14 @@ environment variables, build/start commands, security limits and the live test
 checklist. Use Node 22 LTS or a newer supported LTS.
 
 - Sign in with a private access password; the browser receives a 15-minute session.
-- Start conversation explicitly enables the microphone and paid OpenAI connection.
+- Start conversation explicitly enables the microphone and paid provider connections.
 - End conversation releases audio devices; Sign out also revokes the session.
 - English is the default. The requested style is soft, warm, calm and unhurried.
-- Marin is the initial voice; Cedar and Coral are available between conversations.
+- When the server has an ElevenLabs key, Surabhi (warm Indian English) is the
+  initial voice. Marin, Cedar and Coral remain available between conversations.
+- For Surabhi, microphone audio goes to OpenAI and generated reply text goes to
+  ElevenLabs. Both credentials stay on the server. The app saves neither speech
+  nor transcripts; provider account data policies still apply.
 - No permanent tokens, API keys, or relay addresses belong in page URLs.
 
 ## Offline validation

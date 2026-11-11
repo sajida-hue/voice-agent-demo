@@ -19,6 +19,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it('configured ElevenLabs makes Surabhi the default and discloses speech processing before Start', async () => {
+  vi.mocked(fetch).mockImplementation(() => reply({ ...validSession(), surabhiAvailable: true }));
+  render(<App />);
+  const start = await screen.findByRole('button', { name: 'Start conversation' });
+  expect((screen.getByLabelText('Voice') as HTMLSelectElement).value).toBe('surabhi');
+  expect(screen.getByText(/reply text is sent to ElevenLabs/)).toBeTruthy();
+  expect(voice.start).not.toHaveBeenCalled();
+  fireEvent.click(start);
+  expect(voice.start.mock.calls[0][0]).toBe('surabhi');
+  fireEvent.click(screen.getByRole('button', { name: 'End conversation' }));
+  fireEvent.change(screen.getByLabelText('Voice'), { target: { value: 'marin' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start conversation' }));
+  expect(voice.start.mock.calls[1][0]).toBe('marin');
+});
+
 it('login is a POST, clears the password and starts audio only after the Start click', async () => {
   history.replaceState(null, '', '/?wss=old-token-link');
   const request = vi.mocked(fetch);

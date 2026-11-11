@@ -4,7 +4,7 @@ import { startVoice } from './voice';
 import type { Voice } from './voice';
 import './App.css';
 
-type Session = { authenticated: boolean; expiresAt: number | null };
+type Session = { authenticated: boolean; expiresAt: number | null; surabhiAvailable?: boolean };
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -26,7 +26,11 @@ export function App() {
       .then(async response => {
         if (!response.ok) throw new Error('Session unavailable');
         const value: Session = await response.json();
-        if (mounted.current) { setSession(value); setStatus(value.authenticated ? 'Ready to start' : 'Sign in to talk with Sajida'); }
+        if (mounted.current) {
+          setSession(value);
+          setVoice(value.surabhiAvailable ? 'surabhi' : 'marin');
+          setStatus(value.authenticated ? 'Ready to start' : 'Sign in to talk with Sajida');
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted && mounted.current) {
@@ -61,7 +65,9 @@ export function App() {
         setStatus(response.status === 429 ? 'Too many sign-in attempts. Wait five minutes.' : 'Sign-in failed. Check your password and try again.');
         return;
       }
-      setSession(await response.json());
+      const value: Session = await response.json();
+      setSession(value);
+      setVoice(value.surabhiAvailable ? 'surabhi' : 'marin');
       setStatus('Ready to start');
     } catch { setPassword(''); setStatus('Could not reach the server. Please try again.'); }
     finally { setBusy(false); }
@@ -97,6 +103,7 @@ export function App() {
     {session && (session.authenticated ? <>
       <label htmlFor="voice">Voice</label>
       <select id="voice" value={voice} disabled={active || busy} onChange={event => setVoice(event.target.value as Voice)}>
+        {session.surabhiAvailable && <option value="surabhi">Surabhi — warm Indian English</option>}
         <option value="marin">Marin</option><option value="cedar">Cedar</option><option value="coral">Coral</option>
       </select>
       <p className="hint">Change voices between conversations. Each new conversation starts fresh.</p>
@@ -105,14 +112,16 @@ export function App() {
           : <button disabled={busy} onClick={start}>Start conversation</button>}
         <button className="secondary" disabled={busy} onClick={() => void logout()}>Sign out</button>
       </div>
-      <p className="hint">Starting uses your microphone and the paid OpenAI API. Access expires after 15 minutes.</p>
+      <p className="hint">Starting uses your microphone and the paid {voice === 'surabhi' ? 'OpenAI and ElevenLabs APIs' : 'OpenAI API'}. Access expires after 15 minutes.</p>
     </> : <form onSubmit={event => void login(event)}>
       <label htmlFor="password">Access password</label>
       <input id="password" type="password" autoComplete="current-password" maxLength={1024}
         value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} />
       <button type="submit" disabled={busy || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>)}
-    <p className="privacy">Sajida is an AI assistant. Audio is sent to OpenAI during the conversation. This app does not save recordings.</p>
+    <p className="privacy">Sajida is an AI assistant. Audio is sent to OpenAI during the conversation.
+      {session?.surabhiAvailable && ' When Surabhi is selected, reply text is sent to ElevenLabs for speech.'}
+      {' '}This app does not save recordings.</p>
   </section></main>;
 }
 export default App;

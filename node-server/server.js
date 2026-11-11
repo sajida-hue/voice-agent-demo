@@ -10,6 +10,7 @@ const cookieKey = value => digest(value).toString('hex');
 
 // Single operator, one Render instance. Restarting the server revokes all sessions.
 export function createApplication({ apiKey, password, publicOrigin, model = 'gpt-realtime',
+  elevenlabsApiKey, elevenlabsVoiceId = 'ch9J8IB6HKlEHQaWQFdk', elevenlabsModel = 'eleven_flash_v2_5',
   sessionTtlMs = 15 * 60 * 1000, now = Date.now, relay = attachRelay,
   distPath = fileURLToPath(new URL('../client/dist/', import.meta.url)),
 } = {}) {
@@ -72,7 +73,8 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
   app.use(express.json({ limit: '2kb', strict: true }));
   app.get('/api/session', (req, res) => {
     const found = lookup(req);
-    res.json({ authenticated: !!found, expiresAt: found?.session.expiresAt ?? null });
+    res.json({ authenticated: !!found, expiresAt: found?.session.expiresAt ?? null,
+      ...(elevenlabsApiKey ? { surabhiAvailable: true } : {}) });
   });
   app.post('/api/login', (req, res) => {
     // Bounded global limiter: does not trust spoofable forwarding headers.
@@ -93,7 +95,7 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
     timer.unref();
     sessions.set(key, { expiresAt, timer, sockets: new Set() });
     res.set('Set-Cookie', cookie(token, Math.floor(sessionTtlMs / 1000)));
-    return res.json({ authenticated: true, expiresAt });
+    return res.json({ authenticated: true, expiresAt, ...(elevenlabsApiKey ? { surabhiAvailable: true } : {}) });
   });
   app.post('/api/logout', (req, res) => {
     const found = lookup(req);
@@ -114,7 +116,7 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
     wss.handleUpgrade(req, socket, head, ws => {
       found.session.sockets.add(ws);
       ws.once('close', () => found.session.sockets.delete(ws));
-      try { relay(ws, { apiKey, model }); }
+      try { relay(ws, { apiKey, model, elevenlabsApiKey, elevenlabsVoiceId, elevenlabsModel }); }
       catch { ws.close(1011, 'Voice service unavailable'); }
     });
   });

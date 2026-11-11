@@ -80,7 +80,7 @@ export class WavStreamPlayer {
       const { event } = e.data;
       if (event === 'stop') {
         streamNode.disconnect();
-        this.stream = null;
+        if (this.stream === streamNode) this.stream = null;
       } else if (event === 'offset') {
         const { requestId, trackId, offset } = e.data;
         const currentTime = offset / this.sampleRate;
@@ -119,6 +119,11 @@ export class WavStreamPlayer {
     }
     this.stream.port.postMessage({ event: 'write', buffer, trackId });
     return buffer;
+  }
+
+  // Keep the worklet alive between network chunks; drain only after audio.done.
+  finish(trackId) {
+    this.stream?.port.postMessage({ event: 'finish', trackId });
   }
 
   /**

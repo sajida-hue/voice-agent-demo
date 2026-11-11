@@ -3,7 +3,7 @@ import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
 import { instructions } from './conversation_config';
 import { voiceErrorMessage } from './voice_errors';
 
-export type Voice = 'marin' | 'cedar' | 'coral';
+export type Voice = 'surabhi' | 'marin' | 'cedar' | 'coral';
 
 export function startVoice(voice: Voice, onStatus: (value: string) => void, onEnd: () => void) {
   const recorder = new WavRecorder({ sampleRate: 24000 });
@@ -13,6 +13,9 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
   let ready = false;
   let initialized = false;
   let startupTimer: ReturnType<typeof setTimeout> | undefined;
+  let playbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let finishedAudio: { itemId: string; samples: number } | undefined;
+  const interruptedItems = new Set<string>();
   const releaseAudio = () => {
     // Stop devices immediately, even if worklet initialization failed mid-way.
     recorder.stream?.getTracks().forEach((track: MediaStreamTrack) => track.stop());
@@ -28,6 +31,9 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
     stopped = true;
     ready = false;
     clearTimeout(startupTimer);
+    clearTimeout(playbackTimer);
+    finishedAudio = undefined;
+    interruptedItems.clear();
     if (socket) {
       socket.onmessage = null;
       socket.onclose = null;
@@ -42,6 +48,13 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
     if (stopped || socket?.readyState !== WebSocket.OPEN) return;
     if (socket.bufferedAmount > 256 * 1024) { stop('Connection is too slow. Please try again.'); return; }
     socket.send(JSON.stringify(event));
+  };
+  const checkPlayback = () => {
+    if (stopped || !finishedAudio) return;
+    if (!player.stream) {
+      send({ type: 'relay.playback.completed', item_id: finishedAudio.itemId });
+      finishedAudio = undefined;
+    } else playbackTimer = setTimeout(checkPlayback, 100);
   };
   async function run() {
     onStatus('Allow microphone access to begin');
@@ -87,13 +100,34 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
             if (stopped) return;
             onStatus('Ready — speak naturally');
             send({ type: 'response.create' });
-          } else if (event.type === 'response.output_audio.delta' && ready) {
+          } else if (ready && (voice === 'surabhi' ? event.type === 'relay.audio.delta' : event.type === 'response.output_audio.delta')) {
+            if (interruptedItems.has(event.item_id)) return;
             const bytes = Uint8Array.from(atob(event.delta), c => c.charCodeAt(0));
             player.add16BitPCM(bytes.buffer, event.item_id);
+          } else if (voice === 'surabhi' && event.type === 'relay.audio.done') {
+            if (interruptedItems.has(event.item_id)) return;
+            player.finish(event.item_id);
+            finishedAudio = { itemId: event.item_id, samples: event.samples };
+            clearTimeout(playbackTimer);
+            playbackTimer = setTimeout(checkPlayback, 100);
+          } else if (voice !== 'surabhi' && event.type === 'response.output_audio.done') {
+            player.finish(event.item_id);
           } else if (event.type === 'input_audio_buffer.speech_started') {
+            const itemId = typeof event.relay_item_id === 'string' ? event.relay_item_id : undefined;
+            const fullyPlayed = finishedAudio?.itemId === itemId && !player.stream ? finishedAudio : undefined;
+            if (itemId) {
+              interruptedItems.add(itemId);
+              if (interruptedItems.size > 32) interruptedItems.delete(interruptedItems.values().next().value!);
+            }
+            clearTimeout(playbackTimer);
+            finishedAudio = undefined;
             const offset = await player.interrupt();
             if (stopped) return;
-            if (offset?.trackId) send({ type: 'conversation.item.truncate', item_id: offset.trackId,
+            if (voice === 'surabhi') {
+              if (itemId) send({ type: 'relay.playback.interrupted', item_id: itemId,
+                played_ms: fullyPlayed ? fullyPlayed.samples / 24
+                  : offset?.trackId === itemId ? Math.floor(offset.offset / 24) : 0 });
+            } else if (offset?.trackId) send({ type: 'conversation.item.truncate', item_id: offset.trackId,
               content_index: 0, audio_end_ms: Math.floor(offset.offset / 24) });
           } else if (event.type === 'relay.error') {
             stop(voiceErrorMessage(event.error));

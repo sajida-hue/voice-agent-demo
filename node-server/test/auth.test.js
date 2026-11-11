@@ -8,6 +8,23 @@ import { createApplication } from '../server.js';
 
 const origin = 'https://sajida.example';
 const password = 'test-only-long-password';
+test('ElevenLabs availability is public configuration but credentials remain server-side', async t => {
+  let received;
+  const f = await fixture(t, { elevenlabsApiKey: 'private-eleven-key',
+    relay: (_socket, options) => { received = options; } });
+  const state = await fetch(f.base + '/api/session').then(r => r.json());
+  assert.equal(state.surabhiAvailable, true);
+  assert.ok(!JSON.stringify(state).includes('private-eleven-key'));
+  const response = await f.login();
+  const value = await response.json();
+  assert.equal(value.surabhiAvailable, true);
+  assert.ok(!JSON.stringify(value).includes('private-eleven-key'));
+  const socket = f.connect(response.headers.get('set-cookie').split(';')[0]);
+  await once(socket, 'open');
+  assert.equal(received.elevenlabsApiKey, 'private-eleven-key');
+  assert.equal(received.elevenlabsVoiceId, 'ch9J8IB6HKlEHQaWQFdk');
+  socket.close();
+});
 async function fixture(t, options = {}) {
   let relayCalls = 0;
   const application = createApplication({ apiKey: 'offline-placeholder', password, publicOrigin: origin,
