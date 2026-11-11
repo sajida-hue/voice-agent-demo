@@ -79,7 +79,27 @@ For a live local test, copy `node-server/.env.example` to a private `.env` in
 `node-server`, fill the credentials locally, set `PUBLIC_ORIGIN=http://localhost:3000`,
 then change into `node-server` and run `npm start`. Open http://localhost:3000 after building the client.
 
-## Live acceptance (not yet performed)
+## Safe voice diagnostics
+
+If Start conversation fails, the page reports a fixed error category and a random
+reference. Search the Render application logs for that reference or
+`realtime_error`. Logs include only reviewed error codes, known configuration
+field names, the connection stage, and an HTTP status when available. Provider
+messages, response bodies, credentials, audio and transcripts are not logged.
+Unknown provider strings are replaced with `unknown_error`.
+
+The message distinguishes authentication, quota, rate limits, model access,
+session configuration, provider failures and connection failures. An HTTP 429
+without a provider event cannot distinguish rate limits from quota. Do not change
+keys or billing based solely on the old generic error message. Share the new
+category and reference rather than a key or password.
+
+## Live acceptance
+
+The Web Service was deployed and its login page and `/healthz` were checked on
+2026-11-11. An operator's Start attempt then showed the old generic provider
+error. Successful live audio and voice quality remain unverified; the diagnostic
+update supports identifying the cause on the next operator attempt.
 
 1. `/healthz` returns `ok`, and the login page loads at the Web Service address.
 2. Wrong password fails; correct password reveals Start conversation.

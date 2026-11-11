@@ -99,4 +99,30 @@ describe('voice lifecycle with offline audio and transport doubles', () => {
     expect((audio.recorder.context as { state: string }).state).toBe('closed');
     expect(status.mock.lastCall![0]).toContain('Could not start audio');
   });
+
+  it('shows safe quota guidance and a reference, then releases audio', async () => {
+    const status = vi.fn();
+    stop = startVoice('marin', status, vi.fn()); await flush();
+    const socket = FakeSocket.instances[0];
+    const reference = '12345678-1234-4234-8234-123456789abc';
+    await socket.emit({ type: 'relay.error', error: { kind: 'quota', code: 'insufficient_quota', reference,
+      message: 'private upstream details sk-secret', audio: 'private audio' } });
+    expect(status.mock.lastCall![0]).toContain('API quota or billing limit');
+    expect(status.mock.lastCall![0]).toContain(reference);
+    expect(status.mock.lastCall![0]).not.toContain('private');
+    expect(status.mock.lastCall![0]).not.toContain('sk-secret');
+    expect(socket.close).toHaveBeenCalledTimes(1);
+    expect((audio.recorder.context as { state: string }).state).toBe('closed');
+  });
+
+  it('ignores unknown diagnostic strings and still redacts errors from an old relay', async () => {
+    const status = vi.fn();
+    stop = startVoice('marin', status, vi.fn()); await flush();
+    await FakeSocket.instances[0].emit({ type: 'relay.error', error: { kind: 'sk-private', reference: 'private-reference', message: 'private message' } });
+    expect(status.mock.lastCall![0]).not.toContain('private');
+    expect(status.mock.lastCall![0]).toContain('OpenAI reported a voice error');
+    stop = startVoice('marin', status, vi.fn()); await flush();
+    await FakeSocket.instances[1].emit({ type: 'error', error: { message: 'private legacy error' } });
+    expect(status.mock.lastCall![0]).not.toContain('private');
+  });
 });

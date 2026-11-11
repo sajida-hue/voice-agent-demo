@@ -18,6 +18,9 @@ reporting readiness.
   backpressure. API credentials stay on the server.
 - The client has explicit Sign in, Start, End and Sign out controls, microphone
   and playback cleanup, and errors without exposing relay URLs or secrets.
+- Provider event failures and WebSocket handshake failures produce allowlisted
+  diagnostics and a random reference in the UI and server log. Raw provider
+  messages, response bodies, credentials and conversation content are excluded.
 - Sajida speaks English by default in a soft, warm, calm style. Marin is the
   initial selectable voice, alongside Cedar and Coral.
 - Locked dependencies and docs/RENDER_BROWSER_SETUP.md provide the one-service
@@ -26,18 +29,20 @@ reporting readiness.
 
 ## Validation
 
-- 21 server tests pass: real local HTTP/WebSocket auth lifecycle and offline GA
-  relay transport tests. No live provider call is used.
-- 9 client tests pass with simulated DOM/audio/transport: login, explicit start,
+- 29 server tests pass: real local HTTP/WebSocket auth lifecycle, offline GA
+  relay transport, provider error redaction and handshake failures. No live
+  provider call is used by tests.
+- 11 client tests pass with simulated DOM/audio/transport: login, explicit start,
   GA readiness and audio events, interruption, error cleanup, stop, logout,
   expiry and cancellation while microphone permission is pending.
 - Client TypeScript/Vite production build passes.
 - ESLint passes with one pre-existing unused-disable warning in wav_recorder.js.
-- Chromium could not start in the execution environment (system socket
-  restriction). Actual browser audio, CSP/worklets, autoplay and voice quality
-  still require the live acceptance checklist.
-- No live OpenAI call, bot creation, meeting, deployment or main-branch update
-  was performed.
+- The existing Render Web Service was deployed from the development branch;
+  the live login page and `/healthz` were verified on 2026-11-11. An operator's
+  Start attempt produced the old generic provider error. The diagnostics update
+  supports identifying its cause on the next attempt; successful live audio,
+  autoplay, interruption and voice quality remain unverified.
+- No bot creation, meeting or main-branch update was performed.
 
 ## Remaining scope and limits
 
@@ -54,5 +59,6 @@ authorization remain separate work. The Python implementation remains legacy.
 ## References
 
 - https://developers.openai.com/api/docs/guides/realtime-conversations
+- https://developers.openai.com/api/reference/resources/realtime/server-events
 - https://render.com/docs/monorepo-support
 

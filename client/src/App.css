@@ -3,7 +3,7 @@
 .eyebrow { color: #67685d; font-size: 11px; letter-spacing: .16em; font-weight: 700; }
 h1 { margin: 16px 0; font-size: clamp(36px, 8vw, 52px); line-height: 1.1; letter-spacing: -.04em; }
 .voice-card > p { line-height: 1.6; }
-.status { padding: 16px; margin: 24px 0; background: #edf1e9; border-radius: 12px; min-height: 56px; }
+.status { padding: 16px; margin: 24px 0; background: #edf1e9; border-radius: 12px; min-height: 56px; overflow-wrap: anywhere; }
 label { display: block; margin: 16px 0 8px; font-size: 14px; font-weight: 600; }
 input, select { width: 100%; padding: 13px; border: 1px solid #babbb1; border-radius: 8px; font: inherit; background: white; color: inherit; }
 button { padding: 13px 20px; border: 1px solid #333c31; border-radius: 9px; font: inherit; font-weight: 600; color: white; background: #333c31; cursor: pointer; }

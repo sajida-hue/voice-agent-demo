@@ -1,6 +1,7 @@
 // @ts-expect-error Existing JavaScript audio utilities
 import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
 import { instructions } from './conversation_config';
+import { voiceErrorMessage } from './voice_errors';
 
 export type Voice = 'marin' | 'cedar' | 'coral';
 
@@ -94,8 +95,11 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
             if (stopped) return;
             if (offset?.trackId) send({ type: 'conversation.item.truncate', item_id: offset.trackId,
               content_index: 0, audio_end_ms: Math.floor(offset.offset / 24) });
+          } else if (event.type === 'relay.error') {
+            stop(voiceErrorMessage(event.error));
           } else if (event.type === 'error' || (event.type === 'response.done' && event.response?.status === 'failed')) {
-            stop('Voice service error. Check server configuration or try again.');
+            // Safe fallback for an old relay; do not render provider messages.
+            stop(voiceErrorMessage(null));
           }
         } catch { stop('Voice session failed. Please try again.'); }
       };
