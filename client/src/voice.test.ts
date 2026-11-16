@@ -35,6 +35,21 @@ beforeEach(() => {
 afterEach(() => { stop?.(); stop = undefined; vi.unstubAllGlobals(); });
 
 describe('voice lifecycle with offline audio and transport doubles', () => {
+  it('meeting mode uses the bot cookie transport and starts its greeting only after GA readiness', async () => {
+    const ready = vi.fn();
+    stop = startVoice('surabhi', vi.fn(), vi.fn(), { meeting: true, onReady: ready });
+    await flush();
+    const socket = FakeSocket.instances[0];
+    expect(socket.url.href).toBe('ws://localhost:3000/meet/voice');
+    await socket.emit({ type: 'session.created' });
+    const update = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(update.session.instructions).toContain('live Google Meet call as an AI');
+    expect(ready).not.toHaveBeenCalled();
+    await socket.emit({ type: 'session.updated' });
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(audio.recorder.record).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(socket.send.mock.lastCall![0]).type).toBe('response.create');
+  });
   it('plays Surabhi PCM, seals the final buffer and acknowledges drained playback', async () => {
     stop = startVoice('surabhi', vi.fn(), vi.fn()); await flush();
     const socket = FakeSocket.instances[0];

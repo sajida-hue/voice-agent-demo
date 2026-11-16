@@ -1,11 +1,12 @@
 // @ts-expect-error Existing JavaScript audio utilities
 import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
-import { instructions } from './conversation_config';
+import { instructions, meetingInstructions } from './conversation_config';
 import { voiceErrorMessage } from './voice_errors';
 
 export type Voice = 'surabhi' | 'marin' | 'cedar' | 'coral';
 
-export function startVoice(voice: Voice, onStatus: (value: string) => void, onEnd: () => void) {
+export function startVoice(voice: Voice, onStatus: (value: string) => void, onEnd: () => void,
+  options: { meeting?: boolean; onReady?: () => void } = {}) {
   const recorder = new WavRecorder({ sampleRate: 24000 });
   const player = new WavStreamPlayer({ sampleRate: 24000 });
   let socket: WebSocket | undefined;
@@ -57,17 +58,19 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
     } else playbackTimer = setTimeout(checkPlayback, 100);
   };
   async function run() {
-    onStatus('Allow microphone access to begin');
+    onStatus(options.meeting ? 'Connecting meeting audio…' : 'Allow microphone access to begin');
     try {
-      // Output context is resumed directly from the user's Start click.
+      if (options.meeting) startupTimer = setTimeout(() => stop('Meeting audio did not become ready.'), 20000);
+      // Operator mode starts from a click; Recall's browser permits automatic audio.
       const results = await Promise.allSettled([player.connect(), recorder.begin()]);
       if (stopped) { releaseAudio(); return; }
       if (results.some(result => result.status === 'rejected')) {
         stop('Could not start audio. Check microphone permission and try again.');
         return;
       }
+      clearTimeout(startupTimer);
       onStatus('Connecting to voice service…');
-      const url = new URL('/voice', location.origin);
+      const url = new URL(options.meeting ? '/meet/voice' : '/voice', location.origin);
       url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(url);
       startupTimer = setTimeout(() => stop('Voice service did not become ready. Please try again.'), 20000);
@@ -78,7 +81,7 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
           if (event.type === 'session.created' && !initialized) {
             initialized = true;
             send({ type: 'session.update', session: {
-              type: 'realtime', instructions, output_modalities: ['audio'],
+              type: 'realtime', instructions: options.meeting ? meetingInstructions : instructions, output_modalities: ['audio'],
               audio: {
                 input: { format: { type: 'audio/pcm', rate: 24000 }, turn_detection: {
                   type: 'server_vad', create_response: true, interrupt_response: true,
@@ -99,6 +102,7 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
             });
             if (stopped) return;
             onStatus('Ready — speak naturally');
+            options.onReady?.();
             send({ type: 'response.create' });
           } else if (ready && (voice === 'surabhi' ? event.type === 'relay.audio.delta' : event.type === 'response.output_audio.delta')) {
             if (interruptedItems.has(event.item_id)) return;

@@ -4,6 +4,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { attachRelay } from './relay.js';
+import { createMeetBridge, MeetError } from './meet.js';
 
 const digest = value => createHash('sha256').update(value).digest();
 const cookieKey = value => digest(value).toString('hex');
@@ -12,6 +13,8 @@ const cookieKey = value => digest(value).toString('hex');
 export function createApplication({ apiKey, password, publicOrigin, model = 'gpt-realtime',
   elevenlabsApiKey, elevenlabsVoiceId = 'ch9J8IB6HKlEHQaWQFdk', elevenlabsModel = 'eleven_flash_v2_5',
   sessionTtlMs = 15 * 60 * 1000, now = Date.now, relay = attachRelay,
+  recallApiKey, recallRegion = 'us-east-1', googleLoginGroupId,
+  meetOptions = {},
   distPath = fileURLToPath(new URL('../client/dist/', import.meta.url)),
 } = {}) {
   if (!apiKey || typeof password !== 'string' || password.length < 16 || password.length > 1024) {
@@ -28,6 +31,8 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024, perMessageDeflate: false });
+  const meet = createMeetBridge({ publicOrigin, recallApiKey, recallRegion, googleLoginGroupId,
+    elevenlabsAvailable: !!elevenlabsApiKey, now, isBusy: () => wss.clients.size > 0, ...meetOptions });
   let loginWindow = 0;
   let loginAttempts = 0;
 
@@ -74,6 +79,7 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
   app.get('/api/session', (req, res) => {
     const found = lookup(req);
     res.json({ authenticated: !!found, expiresAt: found?.session.expiresAt ?? null,
+      ...(googleLoginGroupId ? { meetAvailable: true } : {}),
       ...(elevenlabsApiKey ? { surabhiAvailable: true } : {}) });
   });
   app.post('/api/login', (req, res) => {
@@ -95,34 +101,60 @@ export function createApplication({ apiKey, password, publicOrigin, model = 'gpt
     timer.unref();
     sessions.set(key, { expiresAt, timer, sockets: new Set() });
     res.set('Set-Cookie', cookie(token, Math.floor(sessionTtlMs / 1000)));
-    return res.json({ authenticated: true, expiresAt, ...(elevenlabsApiKey ? { surabhiAvailable: true } : {}) });
+    return res.json({ authenticated: true, expiresAt, ...(googleLoginGroupId ? { meetAvailable: true } : {}),
+      ...(elevenlabsApiKey ? { surabhiAvailable: true } : {}) });
   });
   app.post('/api/logout', (req, res) => {
     const found = lookup(req);
     if (found) revoke(found.key);
     res.set('Set-Cookie', cookie('', 0)).sendStatus(204);
   });
+  const requireOwner = (req, res, next) => lookup(req) ? next() : res.sendStatus(401);
+  const meetRoute = handler => async (req, res, next) => {
+    try { await handler(req, res); }
+    catch (error) {
+      if (error instanceof MeetError) res.status(error.status).json({ error: error.message });
+      else next(error);
+    }
+  };
+  app.get('/api/meet', requireOwner, (_req, res) => res.json(meet.state()));
+  app.post('/api/meet', requireOwner, meetRoute(async (req, res) => {
+    const result = await meet.prepare(req.body);
+    res.status(201).json(result);
+  }));
+  app.post('/api/meet/end', requireOwner, meetRoute(async (_req, res) => res.json(await meet.end())));
+  // Only a short-lived, one-use capability can authorize the bot's separate cookie.
+  // It cannot log in as the operator, prepare another bot or access provider keys.
+  app.post('/api/meet/activate', meetRoute((req, res) => res.json(meet.activate(req, res, req.body?.ticket))));
+  app.post('/api/meet/ready', meetRoute((req, res) => { meet.ready(req); res.sendStatus(204); }));
   app.use('/api', (_req, res) => res.sendStatus(404));
+  app.get('/meet/agent', (_req, res) => res.sendFile('index.html', { root: distPath }));
   app.use(express.static(distPath, { index: 'index.html', dotfiles: 'deny', cacheControl: false }));
   app.use((_req, res) => res.sendStatus(404));
   app.use((_error, _req, res, _next) => res.status(400).json({ error: 'Invalid request' }));
 
   server.on('upgrade', (req, socket, head) => {
-    const found = lookup(req);
     const reject = code => { socket.end(`HTTP/1.1 ${code}\r\nConnection: close\r\n\r\n`); };
+    const isMeet = req.url === '/meet/voice';
+    const found = isMeet ? meet.lookup(req) : lookup(req);
     // Exact origin prevents cross-site WebSocket hijacking. No URL credentials.
-    if (req.url !== '/voice' || req.headers.origin !== publicOrigin || !found) return reject('401 Unauthorized');
+    if ((!isMeet && req.url !== '/voice') || req.headers.origin !== publicOrigin || !found) return reject('401 Unauthorized');
+    if (!isMeet && meet.state().status !== 'idle') return reject('409 Conflict');
     if (wss.clients.size) return reject('409 Conflict');
     wss.handleUpgrade(req, socket, head, ws => {
-      found.session.sockets.add(ws);
-      ws.once('close', () => found.session.sockets.delete(ws));
+      if (isMeet) meet.attach(found, ws);
+      else {
+        found.session.sockets.add(ws);
+        ws.once('close', () => found.session.sockets.delete(ws));
+      }
       try { relay(ws, { apiKey, model, elevenlabsApiKey, elevenlabsVoiceId, elevenlabsModel }); }
       catch { ws.close(1011, 'Voice service unavailable'); }
     });
   });
   server.on('close', () => {
+    meet.close();
     for (const key of sessions.keys()) revoke(key);
     wss.close();
   });
-  return { app, server, wss };
+  return { app, server, wss, meet };
 }

@@ -10,6 +10,9 @@ try {
     elevenlabsApiKey: process.env.ELEVENLABS_API_KEY,
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'ch9J8IB6HKlEHQaWQFdk',
     elevenlabsModel: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+    recallApiKey: process.env.RECALL_API_KEY,
+    recallRegion: process.env.RECALL_REGION || 'us-east-1',
+    googleLoginGroupId: process.env.RECALL_GOOGLE_LOGIN_GROUP_ID,
   });
   const port = Number(process.env.PORT || 3000);
   server.listen(port, () => console.log(`Sajida server listening on port ${port}`));

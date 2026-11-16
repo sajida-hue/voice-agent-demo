@@ -1,6 +1,11 @@
-# Secure Sajida browser voice pilot with Realtime GA and Surabhi
+# Sajida browser and signed-in Google Meet voice with Surabhi
 
-Replace the shared URL token and misleading WebSocket Connected status with a
+Connect Sajida's existing voice service to signed-in Recall Google Meet bots.
+The operator supplies a Meet link; a separately authorized cloud page listens
+to meeting audio and plays replies without using the operator's microphone.
+Recording is disabled. See [MEET_VOICE_SETUP.md](MEET_VOICE_SETUP.md).
+
+The browser pilot also replaces the shared URL token and misleading WebSocket Connected status with a
 private password login, a revocable 15-minute cookie session and explicit
 conversation controls. When an ElevenLabs key is configured, Sajida defaults to
 Surabhi — Warm Indian Female; Marin, Cedar and Coral remain selectable.
@@ -37,11 +42,11 @@ Surabhi — Warm Indian Female; Marin, Cedar and Coral remain selectable.
 
 ## Validation
 
-- 47 server tests: real local HTTP/WebSocket authentication; two local provider
+- 55 server tests: real local HTTP/WebSocket authentication; two local provider
   WebSocket doubles exercising text-to-speech routing and PCM delivery; bounded
   streaming, cancellation/history repair, HTTP/provider error redaction, timeout
   and cleanup; actual worklet execution across gaps, partial buffers and barge-in.
-- 14 client tests: login and session lifecycle, default Surabhi/native selection,
+- 18 client tests: login and session lifecycle, default Surabhi/native selection,
   disclosure, GA readiness, PCM playback completion, interruption, late chunk
   rejection, error cleanup and pending microphone permission cancellation.
 - TypeScript/Vite production build passes. ESLint has no errors and one existing
@@ -63,9 +68,16 @@ transcripts. Text and recent alignment are kept only in bounded session memory.
 The TTS WebSocket supports Flash/Multilingual models, not the v3/v4 dialogue
 protocol; changing the model variable alone does not migrate the protocol.
 
-Recall.ai list_regions confirmed us-east-1. No Recall API fields, webhooks,
-recording settings, bots or meeting behavior were changed. Meeting media and
-short-lived bot-specific authorization remain separate work. Python is legacy.
+Recall MCP v1.11 Output Media, signed-in bots, Create Bot, recording control,
+automatic leave and Remove Bot docs were used for the meeting bridge. The new
+page uses a five-minute one-use fragment capability and separate 15-minute bot
+cookie. Duplicate starts, origin checks, replay/expiry, logout independence,
+recording-free requests and the full local meeting-cookie-to-provider audio
+path are tested. An optional server Recall key supports direct Create/Leave;
+without it the operator enters the current key locally in a generated command.
+No webhooks were added. No paid provider calls were made by automated checks.
+Live Meet speech, self-audio exclusion and interruptions still need the operator
+acceptance test. Python remains legacy. Main remains unmerged.
 
 ## References
 

@@ -1,8 +1,8 @@
 # Sajida — AI design voice assistant
 
-This development branch prepares a **private browser voice pilot** using OpenAI
-Realtime GA with optional ElevenLabs speech. The client and authenticated
-WebSocket share one Node/Render origin. Changes are on the development branch.
+This development branch provides a **private voice pilot for the browser and
+Google Meet** using OpenAI Realtime GA with optional ElevenLabs speech. The client
+and authenticated WebSocket share one Node/Render origin.
 
 ## Run and deploy
 
@@ -36,15 +36,18 @@ Server tests use local HTTP/WebSocket connections and no provider credentials.
 Client tests use a simulated DOM, microphone and transport. They do not establish
 real voice quality, browser autoplay behavior or meeting compatibility.
 
-## Recall meeting integration: still pending
+## Google Meet voice
 
-Recall.ai MCP is connected and was queried for the authorized region. This change
-does not create bots, join meetings, configure webhooks or implement meeting media.
-The new human login is for the browser pilot; unattended Recall media will need
-separate narrowly scoped, short-lived authorization. Do not put the operator's
-password or a session cookie into a Recall webpage URL.
+Use [the Meet voice setup guide](docs/MEET_VOICE_SETUP.md). Connect prepares a
+signed-in Recall bot whose Output Media webpage automatically listens and speaks
+in the call. A separate one-use capability authorizes the bot; the operator's
+password and provider keys are never put in webpage URLs. Recall recording is
+disabled. The voice connection is limited to 15 minutes for this pilot.
 
-The previous meeting quickstart is not applicable to this authenticated pilot.
+Without a server Recall key, run the prepared Terminal command and enter the
+current Recall key locally. With a server key, the app sends the bot directly.
+This feature does not add Gmail/Calendar access. Live conversation quality and
+Recall microphone/autoplay behavior still require the acceptance test in the guide.
 The Python implementation remains legacy and must not be deployed for this work.
 
 ## Acknowledgements

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { startVoice } from './voice';
 import type { Voice } from './voice';
+import { MeetingPanel } from './MeetingPanel';
 import './App.css';
 
-type Session = { authenticated: boolean; expiresAt: number | null; surabhiAvailable?: boolean };
+type Session = { authenticated: boolean; expiresAt: number | null; surabhiAvailable?: boolean; meetAvailable?: boolean };
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -12,6 +13,7 @@ export function App() {
   const [status, setStatus] = useState('Checking session…');
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(false);
+  const [meetActive, setMeetActive] = useState(false);
   const [voice, setVoice] = useState<Voice>('marin');
   const stopRef = useRef<ReturnType<typeof startVoice> | null>(null);
   const activeRef = useRef(false);
@@ -102,17 +104,18 @@ export function App() {
     <p className="status" role="status" aria-live="polite">{status}</p>
     {session && (session.authenticated ? <>
       <label htmlFor="voice">Voice</label>
-      <select id="voice" value={voice} disabled={active || busy} onChange={event => setVoice(event.target.value as Voice)}>
+      <select id="voice" value={voice} disabled={active || busy || meetActive} onChange={event => setVoice(event.target.value as Voice)}>
         {session.surabhiAvailable && <option value="surabhi">Surabhi — warm Indian English</option>}
         <option value="marin">Marin</option><option value="cedar">Cedar</option><option value="coral">Coral</option>
       </select>
       <p className="hint">Change voices between conversations. Each new conversation starts fresh.</p>
       <div className="actions">
         {active ? <button onClick={() => stopRef.current?.()}>End conversation</button>
-          : <button disabled={busy} onClick={start}>Start conversation</button>}
+          : <button disabled={busy || meetActive} onClick={start}>Start conversation</button>}
         <button className="secondary" disabled={busy} onClick={() => void logout()}>Sign out</button>
       </div>
       <p className="hint">Starting uses your microphone and the paid {voice === 'surabhi' ? 'OpenAI and ElevenLabs APIs' : 'OpenAI API'}. Access expires after 15 minutes.</p>
+      {session.meetAvailable && <MeetingPanel voice={voice} disabled={active || busy} onReserved={setMeetActive} />}
     </> : <form onSubmit={event => void login(event)}>
       <label htmlFor="password">Access password</label>
       <input id="password" type="password" autoComplete="current-password" maxLength={1024}
