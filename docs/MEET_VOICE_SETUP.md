@@ -14,6 +14,11 @@ black background. Status and provider labels are not shown in the meeting tile.
 The model opens with "Hello, my name is Sajida. I'm a graphic designer and AI
 designer. It's lovely to meet you." It then waits for the other person and can
 respond to ordinary small talk without immediately pitching design services.
+The current conversational style is warm and expressive, with everyday wording,
+short emotional reactions and occasional gentle design humor. Interview answers
+remain clear and adapt to the speaker's formality. Text does not include smile or
+laughter stage directions for the speech engine to read aloud. Voice expressiveness
+still needs listening acceptance with the selected speech provider.
 It remains an AI representative and answers honestly if asked about that.
 Its instructions include
 Sajida's supplied professional profile and portfolio examples; disputed dates,
