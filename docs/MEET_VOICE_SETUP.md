@@ -11,7 +11,11 @@ Its microphone feed excludes the bot's own output, avoiding an audio loop.
 
 The bot's camera shows the operator-provided portrait and the name Sajida on a
 black background. Status and provider labels are not shown in the meeting tile.
-The model introduces itself as an AI designer once. Its instructions include
+The model opens with "Hello, my name is Sajida. I'm a graphic designer and AI
+designer. It's lovely to meet you." It then waits for the other person and can
+respond to ordinary small talk without immediately pitching design services.
+It remains an AI representative and answers honestly if asked about that.
+Its instructions include
 Sajida's supplied professional profile and portfolio examples; disputed dates,
 language-level labels, unverified performance metrics and private contact data
 are excluded. Daydrate is explicitly a concept project. This does not add Gmail,

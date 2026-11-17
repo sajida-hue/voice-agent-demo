@@ -81,7 +81,7 @@ export function MeetingPanel({ voice, disabled, onReserved }: {
   const reserved = !!state && state.status !== 'idle';
   return <section className="meeting-panel" aria-labelledby="meeting-title">
     <h2 id="meeting-title">Talk in Google Meet</h2>
-    <p className="hint">Sajida joins from the cloud as an AI assistant, using the selected voice. Your laptop microphone is not used for her connection.</p>
+    <p className="hint">Sajida joins from the cloud as an AI designer, using the selected voice. Your laptop microphone is not used for her connection.</p>
     <p role="status">{message || labels[state?.status || 'idle'] || 'Checking the connection…'}</p>
     {!reserved ? <form onSubmit={event => void connect(event)}>
       <label htmlFor="meeting-url">Meeting link</label>
@@ -94,6 +94,6 @@ export function MeetingPanel({ voice, disabled, onReserved }: {
       <textarea className="meet-command" aria-label="Meet launch command" value={command} readOnly rows={7} spellCheck={false} />
       <p className="hint">Paste the command in Terminal. When prompted, paste your Recall API key and press Enter. The key is hidden and is not saved by this app.</p>
     </>}
-    <p className="hint">Connecting uses paid Recall, OpenAI{voice === 'surabhi' ? ' and ElevenLabs' : ''} APIs. Meeting audio is sent to OpenAI; Surabhi reply text is sent to ElevenLabs. Recording is disabled. This pilot runs for up to 15 minutes after the voice page opens. Let participants know Sajida is AI before starting.</p>
+    <p className="hint">Connecting uses paid Recall, OpenAI{voice === 'surabhi' ? ' and ElevenLabs' : ''} APIs. Meeting audio is sent to OpenAI; Surabhi reply text is sent to ElevenLabs. Recall processes live meeting audio without saving a recording. This pilot runs for up to 15 minutes after the voice page opens. Let participants know Sajida is AI before starting.</p>
   </section>;
 }
