@@ -9,8 +9,9 @@ Surabhi replies still use server-side ElevenLabs Flash with the existing voice
 and speed settings. Recall converts the page's output into the meeting format.
 Its microphone feed excludes the bot's own output, avoiding an audio loop.
 
-The bot's camera shows a simple Sajida card explicitly labelled AI assistant.
-The model also introduces itself as AI once. No human biography or portfolio is
+The bot's camera shows the operator-provided portrait and the name Sajida on a
+black background. Status and provider labels are not shown in the meeting tile.
+The model introduces itself as AI once. No human biography or portfolio is
 invented. This does not add Gmail, Calendar, portfolio presentation or an avatar.
 
 ## Server configuration

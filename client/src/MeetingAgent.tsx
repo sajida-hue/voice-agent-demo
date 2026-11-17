@@ -6,7 +6,6 @@ import './App.css';
 // This page runs inside Recall's cloud browser, not the operator's laptop.
 export function MeetingAgent() {
   const [status, setStatus] = useState('Connecting to the meeting…');
-  const [voice, setVoice] = useState<Voice | null>(null);
   useEffect(() => {
     let stopped = false;
     let stopVoice: ReturnType<typeof startVoice> | undefined;
@@ -28,7 +27,6 @@ export function MeetingAgent() {
         if (!response.ok) { fail(); return; }
         const config: { voice: Voice } = await response.json();
         if (stopped) return;
-        setVoice(config.voice);
         stopVoice = startVoice(config.voice, message => { if (!stopped) setStatus(message); }, () => {}, {
           meeting: true,
           onReady: () => {
@@ -41,12 +39,9 @@ export function MeetingAgent() {
     void connect();
     return () => { stopped = true; controller.abort(); stopVoice?.(); };
   }, []);
-  return <main className="meeting-stage">
-    <p className="eyebrow">AMZLUEA · AI DESIGN ASSISTANT</p>
-    <div className="meeting-avatar" aria-hidden="true">S</div>
+  return <main className="meeting-stage" aria-label="Sajida">
+    <img className="meeting-avatar" src="/sajida-photo.png" alt="" width="200" height="200" />
     <h1>Sajida</h1>
-    <p className="meeting-subtitle">Ideas, with a human touch.</p>
     <p role="status" className="meeting-status">{status}</p>
-    <p className="meeting-disclosure">AI voice · Audio processed by OpenAI{voice === 'surabhi' ? ' · Speech by ElevenLabs' : ''}</p>
   </main>;
 }

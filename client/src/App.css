@@ -18,10 +18,8 @@ form button { margin-top: 16px; width: 100%; }
 .meeting-panel h2 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 12px; }
 .copy-command { margin-top: 16px; width: 100%; }
 .meet-command { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid #babbb1; border-radius: 8px; font: 12px/1.5 monospace; resize: vertical; }
-.meeting-stage { min-height: 100svh; padding: 28px; background: #f4f1ec; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.meeting-avatar { display: grid; place-items: center; width: 130px; height: 130px; border-radius: 50%; background: #dfe5d8; color: #333c31; font-size: 72px; margin: 16px; }
-.meeting-stage h1 { margin: 10px 0; font-size: 64px; }
-.meeting-subtitle { font-size: 22px; color: #66685f; margin: 10px; }
-.meeting-status { max-width: 900px; margin: 24px 0; padding: 12px 24px; border-radius: 30px; background: #e8eddf; font-size: 18px; }
-.meeting-disclosure { color: #66685f; font-size: 14px; margin: 12px; }
+.meeting-stage { min-height: 100svh; width: 100%; padding: 32px; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; text-align: center; }
+.meeting-avatar { display: block; width: clamp(120px, 25vmin, 200px); height: clamp(120px, 25vmin, 200px); flex-shrink: 0; border-radius: 50%; object-fit: cover; background: #181818; }
+.meeting-stage h1 { margin: 0; font-size: clamp(24px, 3vmin, 32px); font-weight: 500; line-height: 1.25; letter-spacing: -.02em; }
+.meeting-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 
