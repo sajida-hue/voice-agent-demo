@@ -41,8 +41,9 @@ real voice quality, browser autoplay behavior or meeting compatibility.
 Use [the Meet voice setup guide](docs/MEET_VOICE_SETUP.md). Connect prepares a
 signed-in Recall bot whose Output Media webpage automatically listens and speaks
 in the call. A separate one-use capability authorizes the bot; the operator's
-password and provider keys are never put in webpage URLs. Recall recording is
-disabled. The voice connection is limited to 15 minutes for this pilot.
+password and provider keys are never put in webpage URLs. Recall live capture uses
+explicit Zero Data Retention, so meeting media is processed without storage on
+Recall. The voice connection is limited to 15 minutes for this pilot.
 
 Without a server Recall key, run the prepared Terminal command and enter the
 current Recall key locally. With a server key, the app sends the bot directly.

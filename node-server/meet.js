@@ -11,7 +11,7 @@ export class MeetError extends Error {
 }
 
 // One operator/instance. Tickets, bot IDs and audio session state are memory-only.
-// Output Media's getUserMedia is independent of recording-based event streams.
+// Output Media needs live capture. Explicit zero retention prevents media storage.
 export function createMeetBridge({ publicOrigin, googleLoginGroupId, recallRegion = 'us-east-1',
   recallApiKey, elevenlabsAvailable, now = Date.now, fetchImpl = fetch,
   ticketTtlMs = 5 * 60 * 1000, voiceTtlMs = 15 * 60 * 1000,
@@ -83,7 +83,7 @@ export function createMeetBridge({ publicOrigin, googleLoginGroupId, recallRegio
     const payload = {
       meeting_url: meetingUrl.trim(),
       google_meet: { google_login_group_id: googleLoginGroupId },
-      recording_config: null,
+      recording_config: { retention: null },
       output_media: { camera: { kind: 'webpage', config: { url: `${publicOrigin}/meet/agent#ticket=${ticket}` } } },
       automatic_leave: { waiting_room_timeout: 120, noone_joined_timeout: 120,
         in_call_not_recording_timeout: Math.ceil(voiceTtlMs / 1000) },

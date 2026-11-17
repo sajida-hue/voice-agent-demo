@@ -53,7 +53,7 @@ test('Meet needs operator authentication and exact origin; only normal Meet URLs
   assert.equal(f.calls(), 0);
 });
 
-test('manual request is signed-in, recording-free and contains a one-use fragment, not provider credentials', async t => {
+test('manual request enables live meeting input with zero media retention and a one-use capability', async t => {
   const f = await fixture(t);
   const response = await f.prepare();
   assert.equal(response.status, 201);
@@ -62,7 +62,9 @@ test('manual request is signed-in, recording-free and contains a one-use fragmen
   const payload = JSON.parse(data.command.match(/--data-raw '([\s\S]+)'\n\)/)[1]);
   assert.equal(payload.meeting_url, meetingUrl);
   assert.deepEqual(payload.google_meet, { google_login_group_id: group });
-  assert.equal(payload.recording_config, null);
+  // recording_config:null prevents Output Media from receiving meeting audio.
+  // retention:null keeps live capture enabled without storing recording media.
+  assert.deepEqual(payload.recording_config, { retention: null });
   assert.equal(payload.automatic_leave.in_call_not_recording_timeout, 900);
   assert.equal(payload.output_media.camera.kind, 'webpage');
   const url = new URL(payload.output_media.camera.config.url);
@@ -137,7 +139,7 @@ test('optional server key launches and removes a bot with documented requests; s
   assert.ok(!JSON.stringify(result).includes('private-'));
   assert.equal(requests[0].url, 'https://us-east-1.recall.ai/api/v1/bot/');
   assert.equal(requests[0].options.headers.Authorization, 'Token private-recall');
-  assert.equal(JSON.parse(requests[0].options.body).recording_config, null);
+  assert.deepEqual(JSON.parse(requests[0].options.body).recording_config, { retention: null });
   const stopped = await (await f.post('/api/meet/end', {}, f.owner)).json();
   assert.equal(stopped.leftCall, true);
   assert.equal(requests[1].url, `https://us-east-1.recall.ai/api/v1/bot/${botId}/leave_call/`);
@@ -155,7 +157,7 @@ test('Recall failures are redacted, never auto-retried and invalidate the pendin
   assert.equal(f.meet.state().status, 'idle');
 });
 
-test('meeting cookie carries PCM into Realtime and Surabhi speech back through two local provider sockets', { timeout: 6000 }, async t => {
+test('meeting voice answers a spoken turn after its greeting through both local provider sockets', { timeout: 6000 }, async t => {
   const openai = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   const eleven = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   await Promise.all([once(openai, 'listening'), once(eleven, 'listening')]);
@@ -164,16 +166,25 @@ test('meeting cookie carries PCM into Realtime and Surabhi speech back through t
     await Promise.all([new Promise(r => openai.close(r)), new Promise(r => eleven.close(r))]);
   });
   const received = [];
+  let replies = 0;
   openai.on('connection', ws => {
     ws.send(JSON.stringify({ type: 'session.created' }));
     ws.on('message', data => {
       const event = JSON.parse(data); received.push(event);
       if (event.type === 'session.update') ws.send(JSON.stringify({ type: 'session.updated' }));
+      if (event.type === 'input_audio_buffer.append') for (const turn of [
+        { type: 'input_audio_buffer.speech_started', item_id: 'question' },
+        { type: 'input_audio_buffer.speech_stopped', item_id: 'question' },
+        { type: 'input_audio_buffer.committed', item_id: 'question' },
+      ]) ws.send(JSON.stringify(turn));
+      const itemId = 'reply-' + (replies + 1);
+      if (event.type === 'response.create') replies++;
       if (event.type === 'response.create') for (const event of [
         { type: 'response.created' },
-        { type: 'conversation.item.added', item: { id: 'reply', role: 'assistant' } },
-        { type: 'response.output_text.delta', item_id: 'reply', delta: 'Hello, I am Sajida, an AI design assistant. ' },
-        { type: 'response.output_text.done', item_id: 'reply' },
+        { type: 'conversation.item.added', item: { id: itemId, role: 'assistant' } },
+        { type: 'response.output_text.delta', item_id: itemId,
+          delta: replies === 1 ? 'Hi, I am Sajida, an AI designer. ' : 'The portfolio includes Amazon listing and A+ design. ' },
+        { type: 'response.output_text.done', item_id: itemId },
         { type: 'response.done', response: { status: 'completed' } },
       ]) ws.send(JSON.stringify(event));
     });
@@ -189,6 +200,7 @@ test('meeting cookie carries PCM into Realtime and Surabhi speech back through t
   const data = await (await f.prepare()).json();
   const bot = (await f.activate(data)).headers.get('set-cookie').split(';')[0];
   const socket = f.connect(bot);
+  const spoken = [];
   const done = new Promise((resolve, reject) => {
     socket.on('error', reject);
     socket.on('message', data => {
@@ -196,14 +208,20 @@ test('meeting cookie carries PCM into Realtime and Surabhi speech back through t
       if (event.type === 'session.created') socket.send(JSON.stringify({ type: 'session.update',
         session: { type: 'realtime', audio: { output: { voice: 'surabhi' } } } }));
       if (event.type === 'session.updated') {
-        socket.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: 'AQI=' }));
         socket.send(JSON.stringify({ type: 'response.create' }));
       }
       if (event.type === 'relay.error') reject(Error('Unexpected relay error'));
-      if (event.type === 'relay.audio.done') resolve(event);
+      if (event.type === 'relay.audio.done') {
+        spoken.push(event.item_id);
+        socket.send(JSON.stringify({ type: 'relay.playback.completed', item_id: event.item_id }));
+        if (spoken.length === 1) socket.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: 'AQI=' }));
+        else resolve(event);
+      }
     });
   });
   assert.equal((await done).samples, 240);
+  assert.deepEqual(spoken, ['reply-1', 'reply-2']);
+  assert.equal(received.filter(event => event.type === 'response.create').length, 2);
   assert.ok(received.some(event => event.type === 'input_audio_buffer.append' && event.audio === 'AQI='));
   assert.deepEqual(received.find(event => event.type === 'session.update').session.output_modalities, ['text']);
   socket.close();
