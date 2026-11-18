@@ -80,7 +80,7 @@ export class WavStreamPlayer {
       const { event } = e.data;
       if (event === 'stop') {
         streamNode.disconnect();
-        this.stream = null;
+        if (this.stream === streamNode) this.stream = null;
       } else if (event === 'offset') {
         const { requestId, trackId, offset } = e.data;
         const currentTime = offset / this.sampleRate;
@@ -121,6 +121,11 @@ export class WavStreamPlayer {
     return buffer;
   }
 
+  // Keep the worklet alive between network chunks; drain only after audio.done.
+  finish(trackId) {
+    this.stream?.port.postMessage({ event: 'finish', trackId });
+  }
+
   /**
    * Gets the offset (sample count) of the currently playing stream
    * @param {boolean} [interrupt]
@@ -136,11 +141,14 @@ export class WavStreamPlayer {
       requestId,
     });
     let trackSampleOffset;
+    const deadline = Date.now() + 1000;
     while (!trackSampleOffset) {
+      if (this.context.state === 'closed' || Date.now() > deadline) return null;
       trackSampleOffset = this.trackSampleOffsets[requestId];
       await new Promise((r) => setTimeout(() => r(), 1));
     }
     const { trackId } = trackSampleOffset;
+    delete this.trackSampleOffsets[requestId];
     if (interrupt && trackId) {
       this.interruptedTrackIds[trackId] = true;
     }
@@ -158,3 +166,4 @@ export class WavStreamPlayer {
 }
 
 globalThis.WavStreamPlayer = WavStreamPlayer;
+
