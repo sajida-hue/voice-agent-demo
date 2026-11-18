@@ -4,6 +4,7 @@ const errorKinds = new Map([
   ['invalid_api_key', 'authentication'], ['quota_exceeded', 'quota'],
   ['voice_not_found', 'voice_access'], ['max_character_limit_exceeded', 'configuration'],
 ]);
+const expressiveCues = new Set(['short pause', 'sighs', 'chuckles']);
 
 // One streaming connection per reply. Cancelling a reply also cancels synthesis.
 // Speech and alignment remain in memory, bounded to the most recent two replies.
@@ -12,6 +13,7 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
   timeoutMs = 10000, maxText = 16000, maxQueueBytes = 256 * 1024,
 }) {
   const records = new Map();
+  const dialogue = model === 'eleven_v4_turbo';
   let current;
   let closed = false;
   const finishSocket = record => {
@@ -46,15 +48,29 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
   const drain = record => {
     if (record.socket.readyState !== WebSocket.OPEN || record.cancelled) return;
     // Never insert a space inside an LLM token. The API expects word boundaries.
-    const boundary = record.inputDone ? record.pending.length : record.pending.lastIndexOf(' ') + 1;
+    let boundary = record.inputDone ? record.pending.length : record.pending.lastIndexOf(' ') + 1;
+    if (dialogue && !record.inputDone) {
+      const prefix = record.pending.slice(0, boundary);
+      const opening = prefix.lastIndexOf('[');
+      if (opening > prefix.lastIndexOf(']')) boundary = opening;
+    }
     if (boundary > 0) {
-      const text = record.pending.slice(0, boundary).replace(/\s+$/u, '') + ' ';
+      let text = record.pending.slice(0, boundary);
       record.pending = record.pending.slice(boundary);
-      if (!send(record, { text })) return;
+      if (dialogue) text = text.replace(/\[([^\]]*)\]/gu, (_match, cue) => {
+        const name = cue.trim().toLowerCase();
+        if (!expressiveCues.has(name) || record.cues >= 2) return '';
+        record.cues++;
+        return `[${name}]`;
+      }).replace(/\[[^\]]*$/u, '');
+      if (text.trim()) {
+        text = text.replace(/\s+$/u, '') + ' ';
+        if (!send(record, dialogue ? { inputs: [{ text, voice_id: voiceId, new_turn: false }] } : { text })) return;
+      }
     }
     if (record.inputDone && !record.endSent) {
       record.endSent = true;
-      send(record, { text: '' });
+      send(record, dialogue ? { close_socket: true } : { text: '' });
     }
   };
   function begin(itemId, previousItemId) {
@@ -65,10 +81,11 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
       records.delete(id);
     }
     const record = { itemId, previousItemId, text: '', pending: '', samples: 0,
-      alignment: [], cancelled: false, interrupted: false, done: false, played: false, inputDone: false };
+      alignment: [], cues: 0, cancelled: false, interrupted: false, done: false, played: false, inputDone: false };
     records.set(itemId, record);
     current = record;
-    const url = new URL('wss://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream-input');
+    const url = new URL(dialogue ? 'wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input'
+      : 'wss://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream-input');
     url.searchParams.set('model_id', model);
     url.searchParams.set('output_format', 'pcm_24000');
     url.searchParams.set('sync_alignment', 'true');
@@ -84,7 +101,7 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
     record.deadline = setTimeout(() => fail(record, 'connection', 'speech_duration_limit'), 90000);
     record.socket.on('open', () => {
       if (record.cancelled || closed) return;
-      send(record, { text: ' ', voice_settings: {
+      send(record, dialogue ? { voices: [voiceId] } : { text: ' ', voice_settings: {
         stability: 0.40, similarity_boost: 0.75, use_speaker_boost: false, speed: 1.08,
       }, generation_config: { chunk_length_schedule: [80, 120, 180, 240] } });
       drain(record);
@@ -99,7 +116,8 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
       if (event.error || event.detail || event.message) {
         const candidate = [event.error, event.code, event.error?.code, event.detail?.status]
           .find(value => errorKinds.has(value));
-        fail(record, errorKinds.get(candidate) || 'provider', candidate || 'speech_provider_error'); return;
+        fail(record, errorKinds.get(candidate) || (dialogue ? 'expressive_unavailable' : 'provider'),
+          candidate || 'speech_provider_error'); return;
       }
       arm(record);
       if (event.audio) {
@@ -110,12 +128,13 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
         if (!bytes.length || bytes.length % 2) { fail(record, 'provider', 'speech_invalid_audio'); return; }
         const alignment = event.alignment || event.normalizedAlignment;
         const baseMs = record.samples / 24;
+        const starts = alignment?.char_start_times_ms || alignment?.charStartTimesMs;
+        const durations = alignment?.char_durations_ms || alignment?.charDurationsMs;
         if (alignment && Array.isArray(alignment.chars) &&
-          alignment.chars.length === alignment.charStartTimesMs?.length &&
-          alignment.chars.length === alignment.charDurationsMs?.length) {
+          alignment.chars.length === starts?.length && alignment.chars.length === durations?.length) {
           for (let i = 0; i < alignment.chars.length && record.alignment.length < maxText; i++) {
             const char = alignment.chars[i];
-            const start = alignment.charStartTimesMs[i], duration = alignment.charDurationsMs[i];
+            const start = starts[i], duration = durations[i];
             if (typeof char !== 'string' || char.length > 8 || !Number.isFinite(start) || start < 0 ||
               !Number.isFinite(duration) || duration < 0 || record.alignment.length >= maxText) continue;
             record.alignment.push({ char, endMs: baseMs + start + duration });
@@ -124,7 +143,7 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
         record.samples += bytes.length / 2;
         onAudio({ type: 'relay.audio.delta', item_id: itemId, delta: event.audio });
       }
-      if (event.isFinal === true) {
+      if ((dialogue ? event.is_final : event.isFinal) === true) {
         record.done = true;
         finishSocket(record);
         onDone({ type: 'relay.audio.done', item_id: itemId, samples: record.samples });
@@ -132,7 +151,8 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
     });
     record.socket.on('unexpected-response', (_request, response) => {
       const status = response.statusCode;
-      const kind = status === 401 ? 'authentication' : status === 403 ? 'permission'
+      const kind = dialogue && (status === 403 || status === 404) ? 'expressive_unavailable'
+        : status === 401 ? 'authentication' : status === 403 ? 'permission'
         : status === 404 ? 'voice_access' : status === 429 ? 'rate_or_quota' : 'provider';
       fail(record, kind, 'speech_http_error', Number.isInteger(status) && status >= 400 && status <= 599 ? status : null);
       response.destroy();

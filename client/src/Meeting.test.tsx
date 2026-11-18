@@ -31,26 +31,27 @@ it('operator explicitly prepares a cloud connection, copies the command and stop
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
   expect(voice.start).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Meeting link'), { target: { value: 'https://meet.google.com/abc-defg-hij' } });
+  fireEvent.change(screen.getByLabelText('Voice'), { target: { value: 'surabhi-expressive' } });
   fireEvent.click(button);
   expect(await screen.findByLabelText('Meet launch command')).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Start conversation' }) as HTMLButtonElement).disabled).toBe(true);
   const post = vi.mocked(fetch).mock.calls.find(([url, options]) => url === '/api/meet' && options?.method === 'POST');
-  expect(JSON.parse(post![1]!.body as string)).toEqual({ meetingUrl: 'https://meet.google.com/abc-defg-hij', voice: 'surabhi' });
+  expect(JSON.parse(post![1]!.body as string)).toEqual({ meetingUrl: 'https://meet.google.com/abc-defg-hij', voice: 'surabhi-expressive' });
   expect(voice.start).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Stop Meet voice' }));
   await waitFor(() => expect(screen.queryByLabelText('Meet launch command')).toBeNull());
   expect((screen.getByRole('button', { name: 'Start conversation' }) as HTMLButtonElement).disabled).toBe(false);
 });
 
-it('cloud page consumes its fragment and starts meeting audio automatically only after authorization', async () => {
+it.each(['surabhi', 'surabhi-expressive'])('%s: cloud page starts meeting audio only after authorization', async selectedVoice => {
   history.replaceState(null, '', '/meet/agent#ticket=' + 'a'.repeat(64));
-  vi.stubGlobal('fetch', vi.fn(() => reply({ voice: 'surabhi', expiresAt: Date.now() + 900000 })));
+  vi.stubGlobal('fetch', vi.fn(() => reply({ voice: selectedVoice, expiresAt: Date.now() + 900000 })));
   const page = render(<MeetingAgent />);
   await waitFor(() => expect(voice.start).toHaveBeenCalledTimes(1));
   expect(location.hash).toBe('');
   expect(fetch).toHaveBeenCalledWith('/api/meet/activate', expect.objectContaining({ method: 'POST',
     body: JSON.stringify({ ticket: 'a'.repeat(64) }) }));
-  expect(voice.start.mock.calls[0][0]).toBe('surabhi');
+  expect(voice.start.mock.calls[0][0]).toBe(selectedVoice);
   expect(voice.start.mock.calls[0][3].meeting).toBe(true);
   voice.start.mock.calls[0][3].onReady();
   expect(fetch).toHaveBeenCalledWith('/api/meet/ready', expect.objectContaining({ method: 'POST' }));

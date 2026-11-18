@@ -34,6 +34,19 @@ it('configured ElevenLabs makes Surabhi the default and discloses speech process
   expect(voice.start.mock.calls[1][0]).toBe('marin');
 });
 
+it('expressive speech is an explicit voice choice with listening and usage guidance', async () => {
+  vi.mocked(fetch).mockImplementation(() => reply({ ...validSession(), surabhiAvailable: true }));
+  render(<App />);
+  const start = await screen.findByRole('button', { name: 'Start conversation' });
+  expect((screen.getByLabelText('Voice') as HTMLSelectElement).value).toBe('surabhi');
+  fireEvent.change(screen.getByLabelText('Voice'), { target: { value: 'surabhi-expressive' } });
+  expect(screen.getByText(/Listen here before sending Sajida to Meet/)).toBeTruthy();
+  expect(screen.getByText(/its usage rates/)).toBeTruthy();
+  expect(voice.start).not.toHaveBeenCalled();
+  fireEvent.click(start);
+  expect(voice.start.mock.calls[0][0]).toBe('surabhi-expressive');
+});
+
 it('login is a POST, clears the password and starts audio only after the Start click', async () => {
   history.replaceState(null, '', '/?wss=old-token-link');
   const request = vi.mocked(fetch);

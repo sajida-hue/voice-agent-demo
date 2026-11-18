@@ -16,6 +16,10 @@ checklist. Use Node 22 LTS or a newer supported LTS.
 - English is the default. The requested style is soft, warm, calm and unhurried.
 - When the server has an ElevenLabs key, Surabhi (warm Indian English) is the
   initial voice. Marin, Cedar and Coral remain available between conversations.
+- Surabhi — Expressive (preview) is an explicit choice for conversational pauses,
+  small hesitations and vocal reactions through Eleven v4 Turbo dialogue streaming.
+  Test it with Start conversation before sending the selected voice to Meet.
+  Availability, voice compatibility and usage rates depend on the ElevenLabs account.
 - For Surabhi, microphone audio goes to OpenAI and generated reply text goes to
   ElevenLabs. Both credentials stay on the server. The app saves neither speech
   nor transcripts; provider account data policies still apply.

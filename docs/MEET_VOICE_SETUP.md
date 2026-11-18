@@ -5,8 +5,9 @@ operator pastes a Meet link into the existing password-protected Sajida app.
 Recall opens `/meet/agent` inside its own cloud browser. That page automatically
 receives mixed meeting audio through `getUserMedia()`, sends 24 kHz PCM through
 the authenticated Node relay to OpenAI Realtime, and plays replies into Meet.
-Surabhi replies still use server-side ElevenLabs Flash with the existing voice
-and speed settings. Recall converts the page's output into the meeting format.
+Regular Surabhi replies use server-side ElevenLabs Flash. The optional
+Surabhi — Expressive (preview) uses Eleven v4 Turbo dialogue streaming with the
+same configured voice ID. Recall converts the page's output into the meeting format.
 Its microphone feed excludes the bot's own output, avoiding an audio loop.
 
 The bot's camera shows the operator-provided portrait and the name Sajida on a
@@ -14,11 +15,12 @@ black background. Status and provider labels are not shown in the meeting tile.
 The model opens with "Hello, my name is Sajida. I'm a graphic designer and AI
 designer. It's lovely to meet you." It then waits for the other person and can
 respond to ordinary small talk without immediately pitching design services.
-The current conversational style is warm and expressive, with everyday wording,
-short emotional reactions and occasional gentle design humor. Interview answers
-remain clear and adapt to the speaker's formality. Text does not include smile or
-laughter stage directions for the speech engine to read aloud. Voice expressiveness
-still needs listening acceptance with the selected speech provider.
+The conversational style uses everyday wording, occasional thinking sounds,
+sentence fragments or a brief self-correction, and gentle design humor. These are
+contextual, not added to every answer. Interview answers still adapt to the speaker.
+Regular speech uses plain words. Expressive delivery may request a short pause,
+gentle sigh or chuckle using supported voice cues, not narrated stage directions.
+Voice expressiveness still needs listening acceptance with the selected provider.
 It remains an AI representative and answers honestly if asked about that.
 Its instructions include
 Sajida's supplied professional profile and portfolio examples; disputed dates,
@@ -73,6 +75,47 @@ can take a few additional seconds. These are separate timers, not an absolute
 end-to-end runtime guarantee. A new conversation needs a fresh connection.
 
 ## Audio and privacy
+
+### Expressive dialogue preview
+
+Select **Surabhi — Expressive (preview)** in the Voice menu, then use Start
+conversation for a listening test or Connect Sajida to Meet for a cloud call.
+The choice is explicit: regular Surabhi remains the initial selection. No server
+key or model environment variable needs to change for this mode.
+
+The server selects `eleven_v4_turbo` and connects to
+`wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input`, with `output_format=pcm_24000`
+and `sync_alignment=true`. It registers one voice using `voices`, sends text in
+`inputs` entries with `voice_id` and `new_turn: false`, and ends each reply using
+`close_socket: true`. Response completion uses `is_final`; optional character
+alignment uses snake_case fields. Regular Flash continues to use the TTS
+WebSocket protocol and `isFinal`.
+
+Expressive prompts allow only `[short pause]`, `[sighs]` and `[chuckles]`. The
+server keeps at most two of these cues per reply and removes unknown cues;
+streamed fragments cannot send a half-written cue to the synthesizer. The fixed
+opening greeting does not request cues. Interruption handling and the one-time
+history repair guard apply to both Surabhi modes.
+
+The existing ElevenLabs key needs Text to Speech access. Model availability,
+voice compatibility, billing and performed cue quality depend on that account
+and provider. No live paid generation is included in automated checks. If the
+preview is unavailable, choose regular Surabhi; the app does not silently switch
+models or voices.
+
+Primary ElevenLabs references verified for this implementation:
+
+- [Realtime dialogue](https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/realtime-tdd)
+  for setup, input frames, buffering and finalization.
+- [TTS versus TTD WebSockets](https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/tts-vs-ttd-websockets)
+  for model-specific endpoints and response naming.
+- [Voice-assistant example](https://elevenlabs.io/blog/build-an-ai-voice-assistant)
+  for `pcm_24000` on the dialogue WebSocket.
+- [Speech best practices](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices)
+  for supported reaction and pause cues. The Markdown API reference could not be
+  fetched; the published HTML reference and guides were used.
+
+### Meeting media
 
 The bot request sets `recording_config: { "retention": null }`. This is Recall's
 Zero Data Retention mode: live capture remains active for the Output Media

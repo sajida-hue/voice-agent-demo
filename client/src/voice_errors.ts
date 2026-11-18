@@ -7,6 +7,7 @@ const messages: Record<string, string> = {
   permission: 'ElevenLabs denied speech access. Check the API key Text to Speech permission.',
   voice_access: 'ElevenLabs could not access Surabhi. Check that the voice is available in your account.',
   not_configured: 'The server needs an ElevenLabs API key before Surabhi can speak.',
+  expressive_unavailable: 'ElevenLabs could not start Expressive for this account or voice. Select regular Surabhi to continue.',
   configuration: 'OpenAI rejected the voice session settings. The app configuration needs checking.',
   provider: 'OpenAI reported a service error. Please try again later.',
   connection: 'The voice server could not maintain its connection to OpenAI. Please try again.',

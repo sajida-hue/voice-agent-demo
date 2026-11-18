@@ -23,10 +23,10 @@ function fixture(t, extra = {}) {
     }, logDiagnostic: entry => logs.push(entry), ...extra });
   upstream.open();
   t.after(() => browser.close());
-  const configure = () => browser.message({ type: 'session.update', session: { type: 'realtime',
+  const configure = (voice = 'surabhi') => browser.message({ type: 'session.update', session: { type: 'realtime',
     output_modalities: ['audio'], audio: { input: { format: { type: 'audio/pcm', rate: 24000 },
       turn_detection: { type: 'server_vad', create_response: true, interrupt_response: true } },
-    output: { voice: 'surabhi', format: { type: 'audio/pcm', rate: 24000 } } } } });
+    output: { voice, format: { type: 'audio/pcm', rate: 24000 } } } } });
   const text = (delta, item = 'assistant-1') => upstream.message({ type: 'response.output_text.delta', item_id: item, delta });
   return { browser, upstream, synth, logs, configure, text };
 }
@@ -57,6 +57,79 @@ test('Surabhi selects text output, manual VAD responses and server-side ElevenLa
   assert.equal(f.browser.sent.find(e => e.type === 'relay.audio.done').samples, 240);
   assert.equal(f.logs.length, 0);
   assert.ok(!JSON.stringify(f.browser.sent).includes('private-placeholder'));
+});
+
+test('expressive Surabhi registers one voice on dialogue WebSocket and returns snake-case final PCM', t => {
+  const f = fixture(t); f.configure('surabhi-expressive');
+  assert.deepEqual(f.upstream.sent[0].session.output_modalities, ['text']);
+  assert.equal(f.upstream.sent[0].session.audio.output, undefined);
+  f.text('Hmm... [short ');
+  const { socket, url, options } = f.synth[0];
+  assert.equal(new URL(url).pathname, '/v1/text-to-dialogue/stream-input');
+  assert.equal(new URL(url).searchParams.get('model_id'), 'eleven_v4_turbo');
+  assert.equal(new URL(url).searchParams.get('output_format'), 'pcm_24000');
+  assert.equal(options.headers['xi-api-key'], 'eleven-private-placeholder');
+  socket.open();
+  assert.deepEqual(socket.sent[0], { voices: ['ch9J8IB6HKlEHQaWQFdk'] });
+  assert.equal(socket.sent[1].inputs[0].text, 'Hmm... ');
+  f.text('pause] I would start with the main image. ');
+  f.upstream.message({ type: 'response.output_text.done', item_id: 'assistant-1' });
+  assert.deepEqual(socket.sent.at(-1), { close_socket: true });
+  assert.ok(socket.sent.some(event => event.inputs?.[0].text.includes('[short pause]')));
+  socket.message({ audio: Buffer.alloc(48000).toString('base64'), alignment: {
+    chars: [...'Hmm... yes '], char_start_times_ms: [...'Hmm... yes '].map((_, i) => i * 60),
+    char_durations_ms: [...'Hmm... yes '].map(() => 60),
+  } });
+  socket.message({ is_final: true });
+  assert.equal(f.browser.sent.find(event => event.type === 'relay.audio.done').samples, 24000);
+  assert.equal(f.logs.length, 0);
+  assert.ok(!JSON.stringify(socket.sent).includes('private-placeholder'));
+});
+
+test('expressive cues survive split tokens, reject unknown sound effects and stay bounded', t => {
+  const f = fixture(t); f.configure('surabhi-expressive');
+  f.text('Hmm... [sh');
+  const socket = f.synth[0].socket; socket.open();
+  f.text('ort pause] I think [music] this [chuckles] could work [sighs] or [short ');
+  f.text('pause] maybe that. [unfinished');
+  f.upstream.message({ type: 'response.output_text.done', item_id: 'assistant-1' });
+  const text = socket.sent.flatMap(event => event.inputs || []).map(input => input.text).join('');
+  assert.ok(text.includes('[short pause]'));
+  assert.ok(text.includes('[chuckles]'));
+  assert.equal((text.match(/\[/g) || []).length, 2);
+  for (const forbidden of ['[music]', '[sighs]', '[unfinished', '[sh ']) assert.ok(!text.includes(forbidden));
+  assert.deepEqual(socket.sent.at(-1), { close_socket: true });
+});
+
+test('expressive playback uses snake-case alignment to repair an interruption only once', t => {
+  const f = fixture(t); f.configure('surabhi-expressive');
+  f.upstream.message({ type: 'response.created' });
+  f.text('Hello friend ');
+  const socket = f.synth[0].socket; socket.open();
+  socket.message({ audio: Buffer.alloc(48000).toString('base64'), alignment: {
+    chars: [...'Hello friend '], char_start_times_ms: [...'Hello friend '].map((_, i) => i * 70),
+    char_durations_ms: [...'Hello friend '].map(() => 70),
+  } });
+  f.upstream.message({ type: 'response.done', response: { status: 'completed' } });
+  f.upstream.message({ type: 'input_audio_buffer.speech_started' });
+  f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 450 });
+  const repaired = f.upstream.sent.find(event => event.type === 'conversation.item.create');
+  assert.equal(repaired.item.content[0].text, 'Hello');
+  f.upstream.message({ type: 'input_audio_buffer.speech_stopped' });
+  f.upstream.message({ type: 'input_audio_buffer.speech_started' });
+  f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 450 });
+  assert.equal(f.upstream.sent.filter(event => event.type === 'conversation.item.delete').length, 1);
+  assert.equal(f.browser.readyState, 1);
+});
+
+test('unavailable expressive speech gives a safe explicit fallback without switching voices', t => {
+  const f = fixture(t); f.configure('surabhi-expressive'); f.text('Hmm... one idea. ');
+  const socket = f.synth[0].socket; socket.open();
+  socket.message({ error: { message: 'private-provider-details' } });
+  assert.equal(f.logs[0].kind, 'expressive_unavailable');
+  assert.equal(f.synth.length, 1);
+  assert.equal(f.browser.readyState, 3);
+  assert.ok(!JSON.stringify({ logs: f.logs, sent: f.browser.sent }).includes('private-provider-details'));
 });
 
 test('barge-in drops late speech and retains only the aligned, heard prefix before the next reply', t => {

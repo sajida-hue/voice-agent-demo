@@ -5,7 +5,9 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { createApplication } from '../server.js';
 import { attachRelay } from '../relay.js';
 
-test('real local HTTP and WebSocket flow carries text to TTS and PCM back without external API calls', { timeout: 5000 }, async t => {
+for (const voice of ['surabhi', 'surabhi-expressive']) {
+test(`${voice}: real local HTTP and WebSocket flow carries text to speech and PCM back`, { timeout: 5000 }, async t => {
+  const expressive = voice === 'surabhi-expressive';
   const openai = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   const eleven = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   await Promise.all([once(openai, 'listening'), once(eleven, 'listening')]);
@@ -35,10 +37,11 @@ test('real local HTTP and WebSocket flow carries text to TTS and PCM back withou
     assert.equal(req.headers['xi-api-key'], 'offline-eleven');
     ws.on('message', data => {
       const event = JSON.parse(data);
-      texts.push(event.text);
-      if (event.text === '') {
+      if (expressive) texts.push(...(event.inputs || []).map(input => input.text));
+      else texts.push(event.text);
+      if (expressive ? event.close_socket : event.text === '') {
         ws.send(JSON.stringify({ audio: Buffer.alloc(480).toString('base64') }));
-        ws.send(JSON.stringify({ isFinal: true }));
+        ws.send(JSON.stringify(expressive ? { is_final: true } : { isFinal: true }));
       }
     });
   });
@@ -66,7 +69,7 @@ test('real local HTTP and WebSocket flow carries text to TTS and PCM back withou
       const event = JSON.parse(data);
       events.push(event);
       if (event.type === 'session.created') browser.send(JSON.stringify({ type: 'session.update',
-        session: { type: 'realtime', audio: { output: { voice: 'surabhi' } } } }));
+        session: { type: 'realtime', audio: { output: { voice } } } }));
       if (event.type === 'session.updated') browser.send(JSON.stringify({ type: 'response.create' }));
       if (event.type === 'relay.error') reject(Error('Unexpected relay error'));
       if (event.type === 'relay.audio.done') resolve(event);
@@ -76,6 +79,7 @@ test('real local HTTP and WebSocket flow carries text to TTS and PCM back withou
   assert.equal(done.samples, 240);
   assert.ok(events.some(e => e.type === 'relay.audio.delta'));
   assert.deepEqual(updates[0].session.output_modalities, ['text']);
-  assert.deepEqual(texts, [' ', 'Hello Natasha. ', '']);
+  assert.deepEqual(texts, expressive ? ['Hello Natasha. '] : [' ', 'Hello Natasha. ', '']);
   browser.close();
 });
+}

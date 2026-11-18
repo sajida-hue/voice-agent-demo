@@ -104,16 +104,18 @@ export function attachRelay(browser, {
       stop(1008, 'Invalid event'); return;
     }
     if (event.type === 'session.update') {
-      const selected = event.session?.audio?.output?.voice === 'surabhi' ? 'surabhi' : 'native';
+      const voice = event.session?.audio?.output?.voice;
+      const selected = voice === 'surabhi' || voice === 'surabhi-expressive' ? voice : 'native';
       if (mode && selected !== mode) { stop(1008, 'Start a new conversation to change voices'); return; }
       mode = selected;
-      if (mode === 'surabhi' && !surabhi) {
+      if (mode !== 'native' && !surabhi) {
         if (!elevenlabsApiKey) {
           report({ source: 'elevenlabs', kind: 'not_configured', code: 'speech_key_missing', stage, reference });
           stop(); return;
         }
         surabhi = createSurabhiSession({ apiKey: elevenlabsApiKey, voiceId: elevenlabsVoiceId,
-          model: elevenlabsModel, connectSpeech, sendUpstream, sendBrowser,
+          model: mode === 'surabhi-expressive' ? 'eleven_v4_turbo' : elevenlabsModel,
+          connectSpeech, sendUpstream, sendBrowser,
           onError: diagnostic => { report({ ...diagnostic, reference }); stop(); } });
       }
     }

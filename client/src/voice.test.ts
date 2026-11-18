@@ -35,6 +35,22 @@ beforeEach(() => {
 afterEach(() => { stop?.(); stop = undefined; vi.unstubAllGlobals(); });
 
 describe('voice lifecycle with offline audio and transport doubles', () => {
+  it('expressive voice sends its delivery rules and uses ElevenLabs playback and interruption events', async () => {
+    stop = startVoice('surabhi-expressive', vi.fn(), vi.fn(), { meeting: true }); await flush();
+    const socket = FakeSocket.instances[0];
+    await socket.emit({ type: 'session.created' });
+    const update = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(update.session.audio.output.voice).toBe('surabhi-expressive');
+    expect(update.session.instructions).toContain('Speech delivery for expressive dialogue');
+    expect(update.session.instructions).toContain('[short pause]');
+    expect(update.session.instructions).toContain('Let me think for a second');
+    await socket.emit({ type: 'session.updated' });
+    await socket.emit({ type: 'relay.audio.delta', item_id: 'item-1', delta: 'AAA=' });
+    expect(audio.player.add16BitPCM).toHaveBeenCalledTimes(1);
+    await socket.emit({ type: 'input_audio_buffer.speech_started', relay_item_id: 'item-1' });
+    expect(JSON.parse(socket.send.mock.lastCall![0]).type).toBe('relay.playback.interrupted');
+    expect(socket.send.mock.calls.map(call => JSON.parse(call[0]).type)).not.toContain('conversation.item.truncate');
+  });
   it('meeting mode uses the bot cookie transport and starts its greeting only after GA readiness', async () => {
     const ready = vi.fn();
     stop = startVoice('surabhi', vi.fn(), vi.fn(), { meeting: true, onReady: ready });
@@ -91,6 +107,7 @@ describe('voice lifecycle with offline audio and transport doubles', () => {
     expect(update.session.audio.output.voice).toBe('marin');
     expect(update.session.instructions).toContain('Speak English by default');
     expect(update.session.instructions).toContain('soft, warm, calm');
+    expect(update.session.instructions).toContain('Output plain spoken words only');
     expect(audio.recorder.record).not.toHaveBeenCalled();
     await socket.emit({ type: 'session.updated' });
     expect(audio.recorder.record).toHaveBeenCalledTimes(1);

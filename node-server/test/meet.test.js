@@ -129,6 +129,15 @@ test('expired unused tickets never open a provider connection', async t => {
   assert.equal(f.calls(), 0);
 });
 
+test('expressive voice survives Meet capability exchange and still requires speech configuration', async t => {
+  const f = await fixture(t);
+  const data = await (await f.prepare({ meetingUrl, voice: 'surabhi-expressive' })).json();
+  const activated = await f.activate(data);
+  assert.equal((await activated.json()).voice, 'surabhi-expressive');
+  const unavailable = await fixture(t, { elevenlabsApiKey: undefined });
+  assert.equal((await unavailable.prepare({ meetingUrl, voice: 'surabhi-expressive' })).status, 400);
+});
+
 test('optional server key launches and removes a bot with documented requests; secrets never reach responses', async t => {
   const requests = [];
   const f = await fixture(t, { recallApiKey: 'private-recall', meetOptions: { fetchImpl: async (url, options) => {

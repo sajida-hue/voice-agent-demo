@@ -1,14 +1,15 @@
 // @ts-expect-error Existing JavaScript audio utilities
 import { WavRecorder, WavStreamPlayer } from './lib/wavtools/index.js';
-import { instructions, meetingInstructions } from './conversation_config';
+import { instructions, meetingInstructions, plainSpeechInstructions, expressiveSpeechInstructions } from './conversation_config';
 import { voiceErrorMessage } from './voice_errors';
 
-export type Voice = 'surabhi' | 'marin' | 'cedar' | 'coral';
+export type Voice = 'surabhi' | 'surabhi-expressive' | 'marin' | 'cedar' | 'coral';
 
 export function startVoice(voice: Voice, onStatus: (value: string) => void, onEnd: () => void,
   options: { meeting?: boolean; onReady?: () => void } = {}) {
   const recorder = new WavRecorder({ sampleRate: 24000 });
   const player = new WavStreamPlayer({ sampleRate: 24000 });
+  const usingElevenLabs = voice === 'surabhi' || voice === 'surabhi-expressive';
   let socket: WebSocket | undefined;
   let stopped = false;
   let ready = false;
@@ -81,7 +82,8 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
           if (event.type === 'session.created' && !initialized) {
             initialized = true;
             send({ type: 'session.update', session: {
-              type: 'realtime', instructions: options.meeting ? meetingInstructions : instructions, output_modalities: ['audio'],
+              type: 'realtime', instructions: (options.meeting ? meetingInstructions : instructions)
+                + (voice === 'surabhi-expressive' ? expressiveSpeechInstructions : plainSpeechInstructions), output_modalities: ['audio'],
               audio: {
                 input: { format: { type: 'audio/pcm', rate: 24000 }, turn_detection: {
                   type: 'server_vad', create_response: true, interrupt_response: true,
@@ -104,17 +106,17 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
             onStatus('Ready — speak naturally');
             options.onReady?.();
             send({ type: 'response.create' });
-          } else if (ready && (voice === 'surabhi' ? event.type === 'relay.audio.delta' : event.type === 'response.output_audio.delta')) {
+          } else if (ready && (usingElevenLabs ? event.type === 'relay.audio.delta' : event.type === 'response.output_audio.delta')) {
             if (interruptedItems.has(event.item_id)) return;
             const bytes = Uint8Array.from(atob(event.delta), c => c.charCodeAt(0));
             player.add16BitPCM(bytes.buffer, event.item_id);
-          } else if (voice === 'surabhi' && event.type === 'relay.audio.done') {
+          } else if (usingElevenLabs && event.type === 'relay.audio.done') {
             if (interruptedItems.has(event.item_id)) return;
             player.finish(event.item_id);
             finishedAudio = { itemId: event.item_id, samples: event.samples };
             clearTimeout(playbackTimer);
             playbackTimer = setTimeout(checkPlayback, 100);
-          } else if (voice !== 'surabhi' && event.type === 'response.output_audio.done') {
+          } else if (!usingElevenLabs && event.type === 'response.output_audio.done') {
             player.finish(event.item_id);
           } else if (event.type === 'input_audio_buffer.speech_started') {
             const itemId = typeof event.relay_item_id === 'string' ? event.relay_item_id : undefined;
@@ -127,7 +129,7 @@ export function startVoice(voice: Voice, onStatus: (value: string) => void, onEn
             finishedAudio = undefined;
             const offset = await player.interrupt();
             if (stopped) return;
-            if (voice === 'surabhi') {
+            if (usingElevenLabs) {
               if (itemId) send({ type: 'relay.playback.interrupted', item_id: itemId,
                 played_ms: fullyPlayed ? fullyPlayed.samples / 24
                   : offset?.trackId === itemId ? Math.floor(offset.offset / 24) : 0 });

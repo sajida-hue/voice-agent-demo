@@ -94,6 +94,6 @@ export function MeetingPanel({ voice, disabled, onReserved }: {
       <textarea className="meet-command" aria-label="Meet launch command" value={command} readOnly rows={7} spellCheck={false} />
       <p className="hint">Paste the command in Terminal. When prompted, paste your Recall API key and press Enter. The key is hidden and is not saved by this app.</p>
     </>}
-    <p className="hint">Connecting uses paid Recall, OpenAI{voice === 'surabhi' ? ' and ElevenLabs' : ''} APIs. Meeting audio is sent to OpenAI; Surabhi reply text is sent to ElevenLabs. Recall processes live meeting audio without saving a recording. This pilot runs for up to 15 minutes after the voice page opens. Let participants know Sajida is AI before starting.</p>
+    <p className="hint">Connecting uses paid Recall, OpenAI{voice.startsWith('surabhi') ? ' and ElevenLabs' : ''} APIs. Meeting audio is sent to OpenAI; Surabhi reply text is sent to ElevenLabs. Recall processes live meeting audio without saving a recording. This pilot runs for up to 15 minutes after the voice page opens. Let participants know Sajida is AI before starting.</p>
   </section>;
 }

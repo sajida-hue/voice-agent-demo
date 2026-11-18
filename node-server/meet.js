@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const voices = new Set(['surabhi', 'marin', 'cedar', 'coral']);
+const voices = new Set(['surabhi', 'surabhi-expressive', 'marin', 'cedar', 'coral']);
 const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
 const token = () => randomBytes(32).toString('hex');
 
@@ -67,7 +67,7 @@ export function createMeetBridge({ publicOrigin, googleLoginGroupId, recallRegio
   async function prepare({ meetingUrl, voice = 'surabhi' } = {}) {
     if (!enabled) throw new MeetError(503, 'The Google Meet connection is not configured yet.');
     if (current || isBusy()) throw new MeetError(409, 'End the current voice connection before starting another.');
-    if (!voices.has(voice) || (voice === 'surabhi' && !elevenlabsAvailable)) {
+    if (!voices.has(voice) || (voice.startsWith('surabhi') && !elevenlabsAvailable)) {
       throw new MeetError(400, 'Choose an available voice.');
     }
     // Only ordinary Meet links; no credentials, alternate hosts, ports or arbitrary URLs.

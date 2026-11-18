@@ -106,15 +106,17 @@ export function App() {
       <label htmlFor="voice">Voice</label>
       <select id="voice" value={voice} disabled={active || busy || meetActive} onChange={event => setVoice(event.target.value as Voice)}>
         {session.surabhiAvailable && <option value="surabhi">Surabhi — warm Indian English</option>}
+        {session.surabhiAvailable && <option value="surabhi-expressive">Surabhi — Expressive (preview)</option>}
         <option value="marin">Marin</option><option value="cedar">Cedar</option><option value="coral">Coral</option>
       </select>
       <p className="hint">Change voices between conversations. Each new conversation starts fresh.</p>
+      {voice === 'surabhi-expressive' && <p className="hint">Pauses, small hesitations and vocal reactions. Listen here before sending Sajida to Meet. Expressive speech uses your ElevenLabs account and its usage rates.</p>}
       <div className="actions">
         {active ? <button onClick={() => stopRef.current?.()}>End conversation</button>
           : <button disabled={busy || meetActive} onClick={start}>Start conversation</button>}
         <button className="secondary" disabled={busy} onClick={() => void logout()}>Sign out</button>
       </div>
-      <p className="hint">Starting uses your microphone and the paid {voice === 'surabhi' ? 'OpenAI and ElevenLabs APIs' : 'OpenAI API'}. Access expires after 15 minutes.</p>
+      <p className="hint">Starting uses your microphone and the paid {voice.startsWith('surabhi') ? 'OpenAI and ElevenLabs APIs' : 'OpenAI API'}. Access expires after 15 minutes.</p>
       {session.meetAvailable && <MeetingPanel voice={voice} disabled={active || busy} onReserved={setMeetActive} />}
     </> : <form onSubmit={event => void login(event)}>
       <label htmlFor="password">Access password</label>
