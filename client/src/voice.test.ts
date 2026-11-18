@@ -160,6 +160,21 @@ describe('voice lifecycle with offline audio and transport doubles', () => {
     expect((audio.recorder.context as { state: string }).state).toBe('closed');
   });
 
+  it('does not describe a rejected conversation command as rejected startup settings', async () => {
+    const status = vi.fn();
+    stop = startVoice('surabhi', status, vi.fn()); await flush();
+    const socket = FakeSocket.instances[0];
+    await socket.emit({ type: 'session.created' });
+    await socket.emit({ type: 'session.updated' });
+    await socket.emit({ type: 'relay.error', error: { source: 'openai', kind: 'configuration',
+      stage: 'conversation', reference: '12345678-1234-4234-8234-123456789abc',
+      message: 'private provider content', operation: 'private operation' } });
+    expect(status.mock.lastCall![0]).toContain('during the conversation');
+    expect(status.mock.lastCall![0]).not.toContain('session settings');
+    expect(status.mock.lastCall![0]).not.toContain('private');
+    expect(status.mock.lastCall![0]).toContain('12345678-1234-4234-8234-123456789abc');
+  });
+
   it('ignores unknown diagnostic strings and still redacts errors from an old relay', async () => {
     const status = vi.fn();
     stop = startVoice('marin', status, vi.fn()); await flush();

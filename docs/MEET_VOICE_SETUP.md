@@ -109,6 +109,28 @@ Recall can show recording/status metadata in ZDR mode; this does not mean media
 is stored. The existing Render free instance can cold-start; a deploy or restart
 revokes all in-memory connections.
 
+## Voice failure diagnostics
+
+The relay records safe provider classifications and the session stage. A
+`conversation` stage means OpenAI already acknowledged the session configuration;
+an invalid request at that point does not establish a startup-settings failure.
+For future errors, the relay correlates OpenAI's `error.event_id` with a bounded
+in-memory map and logs only a reviewed operation name such as
+`conversation.item.delete`. Request contents, provider messages and event IDs are
+not logged. The last eight audio requests and 64 control requests have separate
+correlation maps, so continuous PCM cannot evict control operations. Each request
+has a unique event ID. Both maps are cleared when the connection closes.
+
+Surabhi playback cancellation is idempotent for each reply. Repeated VAD starts
+before a new reply must not return the same interrupted record for another
+history deletion. A stateful regression test rejects duplicate deletions and
+verifies that a later reply still emits audio.
+
+Official OpenAI references: [client events](https://developers.openai.com/api/reference/resources/realtime/client-events)
+for history deletion semantics, and [server events](https://developers.openai.com/api/reference/resources/realtime/server-events)
+for error-event correlation. Automated tests use local provider doubles; a fresh
+live voice test is still needed to confirm the reported production failure is resolved.
+
 ## Authoritative implementation references
 
 Recall MCP v1.11 docs fetched for this change:

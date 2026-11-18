@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { providerDiagnostic, handshakeDiagnostic } from './diagnostics.js';
 import { createSurabhiSession } from './surabhi-session.js';
 
+// Correlate errors with reviewed operation names, never request contents or IDs.
+const traceableRequests = new Set(['session.update', 'response.create', 'response.cancel',
+  'conversation.item.create', 'conversation.item.delete', 'conversation.item.truncate',
+  'input_audio_buffer.append', 'input_audio_buffer.commit', 'input_audio_buffer.clear']);
+
 // GA wire protocol, no Beta SDK or OpenAI-Beta header. Credentials stay here.
 export function attachRelay(browser, {
   apiKey,
@@ -27,6 +32,9 @@ export function attachRelay(browser, {
   let stage = 'connecting';
   let mode;
   let surabhi;
+  let requestSequence = 0;
+  const requestOperations = new Map();
+  const audioOperations = new Map();
   const reference = randomUUID();
   const report = diagnostic => {
     if (stopped) return;
@@ -43,6 +51,8 @@ export function attachRelay(browser, {
     stopped = true;
     clearTimeout(timer);
     queue = [];
+    requestOperations.clear();
+    audioOperations.clear();
     surabhi?.close();
     if (browser.readyState === WebSocket.OPEN) browser.close(code, reason);
     if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
@@ -57,6 +67,17 @@ export function attachRelay(browser, {
   };
   const sendUpstream = event => {
     if (stopped) return;
+    if (traceableRequests.has(event.type)) {
+      // Separate bounded audio history keeps unique IDs without evicting controls.
+      const audio = event.type === 'input_audio_buffer.append';
+      const operations = audio ? audioOperations : requestOperations;
+      const id = `relay_${++requestSequence}`;
+      if (operations.size >= (audio ? 8 : 64)) {
+        operations.delete(operations.keys().next().value);
+      }
+      operations.set(id, event.type);
+      event = { ...event, event_id: id };
+    }
     const text = JSON.stringify(event);
     if (upstream.readyState === WebSocket.OPEN) {
       if (upstream.bufferedAmount + Buffer.byteLength(text) > maxQueueBytes) stop(1013, 'Audio backpressure');
@@ -108,7 +129,9 @@ export function attachRelay(browser, {
     if (event?.type === 'session.updated') stage = 'conversation';
     if (event?.type === 'error' || (event?.type === 'response.done' && event.response?.status === 'failed')) {
       const error = event.type === 'error' ? event.error : event.response?.status_details?.error;
-      report(providerDiagnostic(error, stage, reference));
+      const operation = event.type === 'response.done' ? 'response.create'
+        : requestOperations.get(error?.event_id) || audioOperations.get(error?.event_id);
+      report({ ...providerDiagnostic(error, stage, reference), ...(operation ? { operation } : {}) });
       stop();
       return;
     }

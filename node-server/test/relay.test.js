@@ -33,7 +33,7 @@ test('queued session update precedes audio and is flushed once', () => {
   events.forEach(event => browser.emit('message', Buffer.from(JSON.stringify(event)), false));
   assert.equal(upstream.sent.length, 0);
   upstream.readyState = 1; upstream.emit('open');
-  assert.deepEqual(upstream.sent.map(JSON.parse), events);
+  assert.deepEqual(upstream.sent.map(data => { const { event_id, ...event } = JSON.parse(data); return event; }), events);
   upstream.emit('open'); assert.equal(upstream.sent.length, 2);
   browser.close();
 });
@@ -116,6 +116,47 @@ test('unrecognized codes, types and parameter names are never logged verbatim', 
   assert.equal(logs[0].errorType, 'unknown_error');
   assert.equal(logs[0].parameter, null);
   assert.ok(!JSON.stringify({ logs, sent: browser.sent }).includes('private_'));
+});
+
+test('rejected operations remain identifiable after continuous PCM without logging request data or event IDs', () => {
+  const { browser, upstream, logs } = setup();
+  upstream.readyState = 1; upstream.emit('open');
+  browser.emit('message', Buffer.from(JSON.stringify({ type: 'conversation.item.delete',
+    event_id: 'private-client-id', item_id: 'private-conversation-item' })), false);
+  const requestId = JSON.parse(upstream.sent[0]).event_id;
+  assert.notEqual(requestId, 'private-client-id');
+  for (let i = 0; i < 200; i++) browser.emit('message', Buffer.from(JSON.stringify({
+    type: 'input_audio_buffer.append', audio: 'cHJpdmF0ZS1hdWRpbw==' })), false);
+  assert.equal(new Set(upstream.sent.map(data => JSON.parse(data).event_id)).size, 201);
+  upstream.emit('message', Buffer.from(JSON.stringify({ type: 'error', error: {
+    type: 'invalid_request_error', event_id: requestId, message: 'private-provider-message',
+  } })), false);
+  assert.equal(logs[0].operation, 'conversation.item.delete');
+  const output = JSON.stringify({ logs, sent: browser.sent });
+  for (const secret of ['private-', 'cHJpdmF0ZS1hdWRpbw==', requestId]) assert.ok(!output.includes(secret));
+});
+
+test('operation correlation evicts old control IDs', () => {
+  const { browser, upstream, logs } = setup();
+  upstream.readyState = 1; upstream.emit('open');
+  for (let i = 0; i < 70; i++) browser.emit('message', Buffer.from('{"type":"response.create"}'), false);
+  const firstId = JSON.parse(upstream.sent[0]).event_id;
+  upstream.emit('message', Buffer.from(JSON.stringify({ type: 'error', error: {
+    type: 'invalid_request_error', event_id: firstId, message: 'private-provider-message',
+  } })), false);
+  assert.equal(logs[0].operation, undefined);
+  assert.ok(!JSON.stringify({ logs, sent: browser.sent }).includes('private-'));
+});
+
+test('unknown client commands never become diagnostic operation labels', () => {
+  const { browser, upstream, logs } = setup();
+  upstream.readyState = 1; upstream.emit('open');
+  browser.emit('message', Buffer.from('{"type":"private-command","event_id":"private-event"}'), false);
+  upstream.emit('message', Buffer.from(JSON.stringify({ type: 'error', error: {
+    type: 'invalid_request_error', event_id: 'private-event', message: 'private-provider-message',
+  } })), false);
+  assert.equal(logs[0].operation, undefined);
+  assert.ok(!JSON.stringify({ logs, sent: browser.sent }).includes('private-'));
 });
 
 for (const [status, kind] of [[401, 'authentication'], [403, 'model_access'], [429, 'rate_or_quota'], [503, 'provider']]) {

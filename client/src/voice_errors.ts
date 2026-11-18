@@ -18,5 +18,8 @@ export function voiceErrorMessage(error: unknown): string {
   const kind = typeof value.kind === 'string' && Object.prototype.hasOwnProperty.call(messages, value.kind) ? value.kind : 'unknown';
   const reference = typeof value.reference === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.reference)
     ? ` Reference: ${value.reference}.` : '';
-  return (value.source === 'elevenlabs' ? messages[kind].replace(/OpenAI/g, 'ElevenLabs') : messages[kind]) + reference;
+  const message = kind === 'configuration' && value.stage === 'conversation'
+    ? 'OpenAI rejected a voice request during the conversation. Please reconnect and use the reference if it repeats.'
+    : messages[kind];
+  return (value.source === 'elevenlabs' ? message.replace(/OpenAI/g, 'ElevenLabs') : message) + reference;
 }

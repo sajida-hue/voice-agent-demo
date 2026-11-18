@@ -65,7 +65,7 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
       records.delete(id);
     }
     const record = { itemId, previousItemId, text: '', pending: '', samples: 0,
-      alignment: [], cancelled: false, done: false, played: false, inputDone: false };
+      alignment: [], cancelled: false, interrupted: false, done: false, played: false, inputDone: false };
     records.set(itemId, record);
     current = record;
     const url = new URL('wss://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream-input');
@@ -161,8 +161,12 @@ export function createElevenSpeech({ apiKey, voiceId, model = 'eleven_flash_v2_5
       drain(record);
     },
     cancel() {
-      if (current && !current.cancelled) finishSocket(current);
-      return current && !current.played ? current : null;
+      // Several VAD starts can precede the next reply. Reconcile an item once;
+      // returning it again would try to delete an already removed history item.
+      if (!current || current.played || current.interrupted) return null;
+      current.interrupted = true;
+      if (!current.cancelled) finishSocket(current);
+      return current;
     },
     completed(itemId) {
       const record = records.get(itemId);

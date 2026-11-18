@@ -81,7 +81,8 @@ test('barge-in drops late speech and retains only the aligned, heard prefix befo
   assert.equal(f.upstream.sent.filter(e => e.type === 'response.create').length, 0);
   f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 450 });
   const tail = f.upstream.sent.slice(-3);
-  assert.deepEqual(tail[0], { type: 'conversation.item.delete', item_id: 'assistant-1' });
+  assert.equal(tail[0].type, 'conversation.item.delete');
+  assert.equal(tail[0].item_id, 'assistant-1');
   assert.equal(tail[1].type, 'conversation.item.create');
   assert.equal(tail[1].previous_item_id, 'user-1');
   assert.equal(tail[1].item.content[0].text, 'Hello');
@@ -98,7 +99,8 @@ test('history repair waits for response cancellation and ignores forged playback
   f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 0 });
   assert.ok(!f.upstream.sent.some(e => e.type === 'conversation.item.delete'));
   f.upstream.message({ type: 'response.done', response: { status: 'cancelled' } });
-  assert.deepEqual(f.upstream.sent.at(-1), { type: 'conversation.item.delete', item_id: 'assistant-1' });
+  assert.equal(f.upstream.sent.at(-1).type, 'conversation.item.delete');
+  assert.equal(f.upstream.sent.at(-1).item_id, 'assistant-1');
 });
 
 test('fully played replies stay in history when the user speaks again', t => {
@@ -106,11 +108,46 @@ test('fully played replies stay in history when the user speaks again', t => {
   f.configure(); f.text('Hello ');
   const socket = f.synth[0].socket; socket.open();
   f.upstream.message({ type: 'response.output_text.done', item_id: 'assistant-1' });
-  socket.message({ audio: 'AAAA' }); socket.message({ isFinal: true });
+  socket.message({ audio: 'AAA=' }); socket.message({ isFinal: true });
   f.browser.message({ type: 'relay.playback.completed', item_id: 'assistant-1' });
   f.upstream.message({ type: 'input_audio_buffer.speech_started' });
   assert.equal(f.browser.sent.at(-1).relay_item_id, undefined);
   assert.ok(!f.upstream.sent.some(e => e.type === 'conversation.item.delete'));
+});
+
+test('repeated speech starts reconcile an interrupted reply once and keep the session usable', t => {
+  const f = fixture(t); f.configure();
+  let itemExists = true;
+  const send = f.upstream.send.bind(f.upstream);
+  f.upstream.send = data => {
+    const event = JSON.parse(data);
+    send(data);
+    if (event.type !== 'conversation.item.delete') return;
+    if (!itemExists) f.upstream.message({ type: 'error', error: {
+      type: 'invalid_request_error', message: 'Cannot delete an item that does not exist.' } });
+    itemExists = false;
+  };
+  f.upstream.message({ type: 'response.created' });
+  f.text('Hello friend ');
+  f.synth[0].socket.open();
+  f.upstream.message({ type: 'response.done', response: { status: 'completed' } });
+  f.upstream.message({ type: 'input_audio_buffer.speech_started' });
+  f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 0 });
+  // Another VAD start can arrive before a new reply has produced any TTS text.
+  f.upstream.message({ type: 'input_audio_buffer.speech_stopped' });
+  f.upstream.message({ type: 'input_audio_buffer.speech_started' });
+  f.browser.message({ type: 'relay.playback.interrupted', item_id: 'assistant-1', played_ms: 0 });
+  f.upstream.message({ type: 'input_audio_buffer.speech_stopped' });
+  f.upstream.message({ type: 'input_audio_buffer.committed', item_id: 'user-2' });
+  assert.equal(f.browser.readyState, 1);
+  assert.equal(f.logs.length, 0);
+  assert.equal(f.upstream.sent.filter(e => e.type === 'conversation.item.delete').length, 1);
+  assert.equal(f.upstream.sent.filter(e => e.type === 'response.create').length, 1);
+  f.upstream.message({ type: 'response.created' });
+  f.text('Yes, I can hear you. ', 'assistant-2');
+  const next = f.synth[1].socket; next.open();
+  next.message({ audio: 'AAA=' });
+  assert.ok(f.browser.sent.some(event => event.type === 'relay.audio.delta' && event.item_id === 'assistant-2'));
 });
 
 test('native voices do not open a synthesis connection even when an ElevenLabs key exists', t => {
